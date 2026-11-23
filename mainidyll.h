@@ -30,39 +30,44 @@ public:
 private:
     void signIn();
     void signOut();
-    void loadInquiry();
-    void loadPublicRecord();
-    void loadPrivateRecord();
-    void saveInquiry();
-    void savePrivateInquiry();
-    void deleteSelectedInquiry();
-    void deletePendingInquiry();
-    void archiveInquiry(const QString &code, const QString &label, bool fromPending);
-    void removePendingInquiryFromList(const QString &code);
-    void updatePendingDeleteButton();
-    QListWidgetItem *selectedInquiry() const;
-    void updateDeleteButton();
-    void refreshDeletedInquiries();
-    void loadDeletedPage(const QString &pageToken);
-    void showDeletedInquiry(QListWidgetItem *item);
-    void refreshCollection(const QString &collection);
-    void loadCollectionRecord(const QString &collection, const QString &code);
-    void saveSingleRecord(const QString &collection, const QJsonObject &fields);
+    void renewPendingSession(bool background);
+
     void openCreateInquiry();
     void postNewInquiry(const QString &code, const QJsonObject &publicData,
                         const QJsonObject &privateData);
+
     void refreshPendingInquiries(bool background = false);
     void loadPendingPage(bool background, const QString &pageToken, QJsonArray documents);
     void applyPendingList(const QJsonArray &documents);
-    void renewPendingSession(bool background);
     void updatePendingHighlight();
     void setPendingFieldsEnabled(bool enabled);
     void loadPendingInquiry(const QString &code);
     void promotePendingInquiry();
     void finishPendingPromotion();
-    void saveRecord(const QString &collection, const QJsonObject &fields);
+    void removePendingInquiryFromList(const QString &code);
+
+    void refreshCollection(const QString &collection);
+    void loadCollectionRecord(const QString &collection, const QString &code);
+    void loadInquiry();
+    void loadPublicRecord();
+    void loadPrivateRecord();
     QJsonObject publicFields() const;
     QJsonObject privateFields() const;
+    void saveInquiry();
+    void savePrivateInquiry();
+    void saveSingleRecord(const QString &collection, const QJsonObject &fields);
+    void saveRecord(const QString &collection, const QJsonObject &fields);
+
+    void refreshDeletedInquiries();
+    void loadDeletedPage(const QString &pageToken);
+    void showDeletedInquiry(QListWidgetItem *item);
+    QListWidgetItem *selectedInquiry() const;
+    void updateDeleteButton();
+    void updatePendingDeleteButton();
+    void deleteSelectedInquiry();
+    void deletePendingInquiry();
+    void archiveInquiry(const QString &code, const QString &label, bool fromPending);
+
     void showError(const QString &message);
     void updateButtons();
 

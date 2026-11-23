@@ -17,6 +17,13 @@ set(PROJECT_SOURCES
         mainidyll.cpp
         mainidyll.h
         mainidyll.ui
+        session.cpp
+        createinquiry.cpp
+        pendinginquiries.cpp
+        inquiryrecords.cpp
+        inquiryarchive.cpp
+        firestore.cpp
+        firestore.h
         sounds.qrc
 )
 
