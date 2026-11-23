@@ -3,7 +3,7 @@
 #include <QApplication>
 
 #ifdef IDYLLWILD_MAC_UPDATES
-void checkForMacUpdates(QApplication &app);
+void setupMacUpdates(QMainWindow &window);
 #endif
 
 int main(int argc, char *argv[])
@@ -12,9 +12,9 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationName(QStringLiteral("Idyllwild"));
     QApplication::setApplicationName(QStringLiteral("IdyllwildApp"));
     MainIdyll w;
-    w.show();
 #ifdef IDYLLWILD_MAC_UPDATES
-    checkForMacUpdates(a);
+    setupMacUpdates(w);
 #endif
+    w.show();
     return a.exec();
 }
