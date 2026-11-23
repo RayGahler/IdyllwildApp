@@ -1,0 +1,81 @@
+name: Release macOS app
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  MACOS_ASSET: IdyllwildApp-macOS-arm64.dmg
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.3'
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtmultimedia
+
+      - name: Build app
+        run: |
+          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build --parallel
+
+      - name: Package disk image
+        working-directory: build
+        run: |
+          "$QT_ROOT_DIR/bin/macdeployqt" IdyllwildApp.app -dmg
+          mv IdyllwildApp.dmg "$MACOS_ASSET"
+
+      - name: Upload disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-disk-image
+          path: build/${{ env.MACOS_ASSET }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download disk image
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-disk-image
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="macos-build-$GITHUB_RUN_ID"
+          if release=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets,isDraft); then
+            if ! jq -e --arg asset "$MACOS_ASSET" 'any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
+              gh release upload "$tag" "$MACOS_ASSET" --repo "$GITHUB_REPOSITORY"
+            fi
+            if jq -e '.isDraft' <<< "$release" >/dev/null; then
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+            fi
+          else
+            gh release create "$tag" "$MACOS_ASSET" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "macOS build #$GITHUB_RUN_NUMBER" \
+              --notes "Apple Silicon test build from commit $GITHUB_SHA. This build has not been notarized." \
+              --prerelease --latest=false
+          fi
