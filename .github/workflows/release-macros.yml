@@ -57,12 +57,20 @@ jobs:
           "$QT_ROOT_DIR/bin/qt-cmake" -S . -B build "${args[@]}"
           cmake --build build --parallel
 
-      - name: Package disk image
+      - name: Deploy and verify app signature
         working-directory: build
         run: |
-          "$QT_ROOT_DIR/bin/macdeployqt" IdyllwildApp.app -dmg
+          "$QT_ROOT_DIR/bin/macdeployqt" IdyllwildApp.app -codesign=- -no-strip
+          # Seal the entire bundle after deployment has finished modifying it.
+          codesign --force --sign - IdyllwildApp.app
+          codesign --verify --deep --strict --verbose=2 IdyllwildApp.app
+
+      - name: Package verified app
+        working-directory: build
+        run: |
           mkdir -p release
-          mv IdyllwildApp.dmg "release/$MACOS_ASSET"
+          hdiutil create -srcfolder IdyllwildApp.app -volname IdyllwildApp \
+            -format UDZO "release/$MACOS_ASSET"
 
       - name: Sign update and generate appcast
         if: vars.SPARKLE_PUBLIC_KEY != ''
