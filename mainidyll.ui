@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainIdyll</class>
+ <widget class="QMainWindow" name="MainIdyll">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>900</width><height>720</height></rect>
+  </property>
+  <property name="windowTitle"><string>Idyllwild Inquiry Admin</string></property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="mainLayout">
+    <item>
+     <widget class="QGroupBox" name="signInGroup">
+      <property name="title"><string>Admin sign in</string></property>
+      <layout class="QHBoxLayout" name="signInLayout">
+       <item><widget class="QLineEdit" name="emailEdit"><property name="placeholderText"><string>Admin email</string></property></widget></item>
+       <item><widget class="QLineEdit" name="passwordEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Password</string></property></widget></item>
+       <item><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
+       <item><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign out</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="lookupLayout">
+      <item><widget class="QLabel" name="codeLabel"><property name="text"><string>Inquiry code</string></property></widget></item>
+      <item><widget class="QLineEdit" name="codeEdit"><property name="placeholderText"><string>IDY-ABC123</string></property></widget></item>
+      <item><widget class="QPushButton" name="loadButton"><property name="text"><string>Load inquiry</string></property></widget></item>
+      <item><widget class="QPushButton" name="deleteInquiryButton">
+       <property name="enabled"><bool>false</bool></property>
+       <property name="text"><string>Delete selected inquiry</string></property>
+      </widget></item>
+     </layout>
+    </item>
+    <item alignment="Qt::AlignRight">
+     <widget class="QPushButton" name="createInquiryButton">
+      <property name="text"><string>Create inquiry</string></property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QTabWidget" name="inquiryTabs">
+      <widget class="QWidget" name="pendingTab">
+       <attribute name="title"><string>Pending Inquiries</string></attribute>
+       <layout class="QVBoxLayout" name="pendingLayout">
+        <item>
+         <layout class="QHBoxLayout" name="pendingToolbar">
+          <item><widget class="QPushButton" name="refreshPendingButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QLabel" name="pendingCodeLabel"><property name="text"><string>Selected inquiry code</string></property></widget></item>
+          <item><widget class="QLabel" name="pendingSelectedCodeLabel"><property name="text"><string>None</string></property></widget></item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="pendingContent">
+          <item>
+           <widget class="QListWidget" name="pendingList"/>
+          </item>
+          <item>
+           <widget class="QWidget" name="pendingDetails">
+            <layout class="QFormLayout" name="pendingForm">
+             <item row="0" column="0"><widget class="QLabel" name="pendingNameLabel"><property name="text"><string>Name</string></property></widget></item>
+             <item row="0" column="1"><widget class="QLineEdit" name="pendingNameEdit"/></item>
+             <item row="1" column="0"><widget class="QLabel" name="pendingPhoneLabel"><property name="text"><string>Phone</string></property></widget></item>
+             <item row="1" column="1"><widget class="QLineEdit" name="pendingPhoneEdit"/></item>
+             <item row="2" column="0"><widget class="QLabel" name="pendingEmailLabel"><property name="text"><string>Email</string></property></widget></item>
+             <item row="2" column="1"><widget class="QLineEdit" name="pendingEmailEdit"/></item>
+             <item row="3" column="0"><widget class="QLabel" name="pendingDeviceLabel"><property name="text"><string>Device</string></property></widget></item>
+             <item row="3" column="1"><widget class="QLineEdit" name="pendingDeviceEdit"/></item>
+             <item row="4" column="0"><widget class="QLabel" name="pendingModelLabel"><property name="text"><string>Model</string></property></widget></item>
+             <item row="4" column="1"><widget class="QLineEdit" name="pendingModelEdit"/></item>
+             <item row="5" column="0"><widget class="QLabel" name="pendingProblemLabel"><property name="text"><string>Problem</string></property></widget></item>
+             <item row="5" column="1"><widget class="QPlainTextEdit" name="pendingProblemEdit"/></item>
+             <item row="6" column="0"><widget class="QLabel" name="pendingPreferredLabel"><property name="text"><string>Preferred contact</string></property></widget></item>
+             <item row="6" column="1"><widget class="QLineEdit" name="pendingPreferredEdit"/></item>
+             <item row="7" column="0"><widget class="QLabel" name="pendingAddressLabel"><property name="text"><string>Address</string></property></widget></item>
+             <item row="7" column="1"><widget class="QPlainTextEdit" name="pendingAddressEdit"/></item>
+             <item row="8" column="0"><widget class="QLabel" name="pendingStatusLabel"><property name="text"><string>Public status</string></property></widget></item>
+             <item row="8" column="1"><widget class="QLineEdit" name="pendingStatusEdit"><property name="text"><string>Received</string></property></widget></item>
+             <item row="9" column="0"><widget class="QLabel" name="pendingMessageLabel"><property name="text"><string>Public message</string></property></widget></item>
+             <item row="9" column="1"><widget class="QPlainTextEdit" name="pendingMessageEdit"/></item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="pendingActions">
+          <item><spacer name="pendingActionsSpacer">
+           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
+          </spacer></item>
+          <item><widget class="QPushButton" name="deletePendingButton">
+           <property name="enabled"><bool>false</bool></property>
+           <property name="text"><string>Move to Deleted Inquires</string></property>
+          </widget></item>
+          <item><widget class="QPushButton" name="promotePendingButton"><property name="text"><string>Push to inquiry collections</string></property></widget></item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="publicTab">
+       <attribute name="title"><string>Public record</string></attribute>
+       <layout class="QVBoxLayout" name="publicCollectionLayout">
+        <item>
+         <layout class="QHBoxLayout" name="publicCollectionToolbar">
+          <item><widget class="QPushButton" name="refreshPublicButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QLabel" name="publicSelectedCodeLabel"><property name="text"><string>Select an inquiry</string></property></widget></item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="publicCollectionContent">
+          <item><widget class="QListWidget" name="publicInquiryList"/></item>
+          <item>
+           <layout class="QFormLayout" name="publicForm">
+            <item row="0" column="0"><widget class="QLabel" name="publicDeviceLabel"><property name="text"><string>Device</string></property></widget></item>
+            <item row="0" column="1"><widget class="QLineEdit" name="publicDeviceEdit"/></item>
+            <item row="1" column="0"><widget class="QLabel" name="publicModelLabel"><property name="text"><string>Model</string></property></widget></item>
+            <item row="1" column="1"><widget class="QLineEdit" name="publicModelEdit"/></item>
+            <item row="2" column="0"><widget class="QLabel" name="statusLabel"><property name="text"><string>Status</string></property></widget></item>
+            <item row="2" column="1"><widget class="QLineEdit" name="statusEdit"/></item>
+            <item row="3" column="0"><widget class="QLabel" name="publicMessageLabel"><property name="text"><string>Public message</string></property></widget></item>
+            <item row="3" column="1"><widget class="QPlainTextEdit" name="publicMessageEdit"/></item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item alignment="Qt::AlignRight"><widget class="QPushButton" name="saveButton"><property name="text"><string>Save changes</string></property></widget></item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="privateTab">
+       <attribute name="title"><string>Private record</string></attribute>
+       <layout class="QVBoxLayout" name="privateCollectionLayout">
+        <item>
+         <layout class="QHBoxLayout" name="privateCollectionToolbar">
+          <item><widget class="QPushButton" name="refreshPrivateButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QLabel" name="privateSelectedCodeLabel"><property name="text"><string>Select an inquiry</string></property></widget></item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="privateCollectionContent">
+          <item><widget class="QListWidget" name="privateInquiryList"/></item>
+          <item>
+           <layout class="QFormLayout" name="privateForm">
+            <item row="0" column="0"><widget class="QLabel" name="nameLabel"><property name="text"><string>Name</string></property></widget></item>
+            <item row="0" column="1"><widget class="QLineEdit" name="nameEdit"/></item>
+            <item row="1" column="0"><widget class="QLabel" name="phoneLabel"><property name="text"><string>Phone</string></property></widget></item>
+            <item row="1" column="1"><widget class="QLineEdit" name="phoneEdit"/></item>
+            <item row="2" column="0"><widget class="QLabel" name="privateEmailLabel"><property name="text"><string>Email</string></property></widget></item>
+            <item row="2" column="1"><widget class="QLineEdit" name="privateEmailEdit"/></item>
+            <item row="3" column="0"><widget class="QLabel" name="privateDeviceLabel"><property name="text"><string>Device</string></property></widget></item>
+            <item row="3" column="1"><widget class="QLineEdit" name="privateDeviceEdit"/></item>
+            <item row="4" column="0"><widget class="QLabel" name="privateModelLabel"><property name="text"><string>Model</string></property></widget></item>
+            <item row="4" column="1"><widget class="QLineEdit" name="privateModelEdit"/></item>
+            <item row="5" column="0"><widget class="QLabel" name="problemLabel"><property name="text"><string>Problem</string></property></widget></item>
+            <item row="5" column="1"><widget class="QPlainTextEdit" name="problemEdit"/></item>
+            <item row="6" column="0"><widget class="QLabel" name="preferredContactLabel"><property name="text"><string>Preferred contact</string></property></widget></item>
+            <item row="6" column="1"><widget class="QLineEdit" name="preferredContactEdit"/></item>
+            <item row="7" column="0"><widget class="QLabel" name="addressLabel"><property name="text"><string>Address</string></property></widget></item>
+            <item row="7" column="1"><widget class="QPlainTextEdit" name="addressEdit"/></item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item alignment="Qt::AlignRight"><widget class="QPushButton" name="savePrivateButton"><property name="text"><string>Save changes</string></property></widget></item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="deletedTab">
+       <attribute name="title"><string>Deleted Inquires</string></attribute>
+       <layout class="QVBoxLayout" name="deletedLayout">
+        <item>
+         <layout class="QHBoxLayout" name="deletedToolbar">
+          <item><widget class="QPushButton" name="refreshDeletedButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QLabel" name="deletedListStatus"><property name="text"><string/></property></widget></item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QSplitter" name="deletedSplitter">
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <widget class="QListWidget" name="deletedInquiryList"/>
+          <widget class="QPlainTextEdit" name="deletedInquiryDetails">
+           <property name="readOnly"><bool>true</bool></property>
+           <property name="placeholderText"><string>Select a deleted inquiry to see its saved details.</string></property>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
