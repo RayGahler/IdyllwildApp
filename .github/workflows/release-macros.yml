@@ -13,6 +13,8 @@ env:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -28,23 +30,61 @@ jobs:
           arch: clang_64
           modules: qtmultimedia
 
-      - name: Build app
+      - name: Install Sparkle
+        if: vars.SPARKLE_PUBLIC_KEY != ''
         run: |
-          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+          archive="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
+          curl --fail --silent --show-error --location \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz \
+            --output "$archive"
+          echo "52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192  $archive" | shasum -a 256 -c
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$archive" -C "$RUNNER_TEMP/sparkle"
+
+      - name: Build app
+        shell: bash
+        run: |
+          args=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64)
+          if [[ -n "$SPARKLE_PUBLIC_KEY" ]]; then
+            args+=(
+              "-DIDYLLWILD_SPARKLE_DIR=$RUNNER_TEMP/sparkle"
+              "-DIDYLLWILD_UPDATE_PUBLIC_KEY=$SPARKLE_PUBLIC_KEY"
+              "-DIDYLLWILD_UPDATE_REPOSITORY=$GITHUB_REPOSITORY"
+              "-DIDYLLWILD_UPDATE_BUILD=$GITHUB_RUN_NUMBER"
+              "-DIDYLLWILD_UPDATE_TAG=macos-build-$GITHUB_RUN_ID"
+            )
+          fi
+          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B build "${args[@]}"
           cmake --build build --parallel
 
       - name: Package disk image
         working-directory: build
         run: |
           "$QT_ROOT_DIR/bin/macdeployqt" IdyllwildApp.app -dmg
-          mv IdyllwildApp.dmg "$MACOS_ASSET"
+          mkdir -p release
+          mv IdyllwildApp.dmg "release/$MACOS_ASSET"
 
-      - name: Upload disk image
+      - name: Sign update and generate appcast
+        if: vars.SPARKLE_PUBLIC_KEY != ''
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "::error::Set the SPARKLE_PRIVATE_KEY Actions secret to enable signed updates."
+            exit 1
+          fi
+          printf '%s\n' "$SPARKLE_PRIVATE_KEY" |
+            "$RUNNER_TEMP/sparkle/bin/generate_appcast" --ed-key-file - \
+              --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/macos-build-$GITHUB_RUN_ID/" \
+              build/release
+          test -s build/release/appcast.xml
+
+      - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
-          name: macos-disk-image
-          path: build/${{ env.MACOS_ASSET }}
+          name: macos-release
+          path: build/release/
           if-no-files-found: error
 
   publish:
@@ -53,10 +93,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download disk image
+      - name: Download release files
         uses: actions/download-artifact@v4
         with:
-          name: macos-disk-image
+          name: macos-release
 
       - name: Publish GitHub prerelease
         env:
@@ -64,18 +104,23 @@ jobs:
         shell: bash
         run: |
           tag="macos-build-$GITHUB_RUN_ID"
+          assets=("$MACOS_ASSET")
+          if [[ -f appcast.xml ]]; then
+            assets+=(appcast.xml)
+          fi
           if release=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets,isDraft); then
-            if ! jq -e --arg asset "$MACOS_ASSET" 'any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
-              gh release upload "$tag" "$MACOS_ASSET" --repo "$GITHUB_REPOSITORY"
-            fi
+            for asset in "${assets[@]}"; do
+              if ! jq -e --arg asset "$asset" 'any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
+                gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"
+              fi
+            done
             if jq -e '.isDraft' <<< "$release" >/dev/null; then
               gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
             fi
           else
-            gh release create "$tag" "$MACOS_ASSET" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
+            gh release create "$tag" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --title "macOS build #$GITHUB_RUN_NUMBER" \
-              --notes "Apple Silicon test build from commit $GITHUB_SHA. This build has not been notarized." \
+              --notes "Apple Silicon test build. This build has not been notarized." \
               --prerelease --latest=false
           fi

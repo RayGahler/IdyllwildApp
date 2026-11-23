@@ -60,6 +60,47 @@ set_target_properties(IdyllwildApp PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
+set(IDYLLWILD_SPARKLE_DIR "" CACHE PATH "Directory containing Sparkle.framework")
+set(IDYLLWILD_UPDATE_PUBLIC_KEY "" CACHE STRING "Sparkle EdDSA public key")
+set(IDYLLWILD_UPDATE_REPOSITORY "" CACHE STRING "GitHub repository hosting updates")
+set(IDYLLWILD_UPDATE_BUILD "" CACHE STRING "Monotonically increasing update build number")
+set(IDYLLWILD_UPDATE_TAG "" CACHE STRING "GitHub release tag for this build")
+
+if(IDYLLWILD_UPDATE_PUBLIC_KEY)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR NOT QT_VERSION_MAJOR EQUAL 6
+       OR NOT EXISTS "${IDYLLWILD_SPARKLE_DIR}/Sparkle.framework/Sparkle"
+       OR NOT IDYLLWILD_UPDATE_PUBLIC_KEY MATCHES "^[A-Za-z0-9+/]+=$"
+       OR NOT IDYLLWILD_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+       OR NOT IDYLLWILD_UPDATE_BUILD MATCHES "^[1-9][0-9]*$"
+       OR NOT IDYLLWILD_UPDATE_TAG MATCHES "^macos-build-[0-9]+$")
+        message(FATAL_ERROR "macOS updates require Qt 6, Sparkle, an EdDSA public key, and release metadata.")
+    endif()
+
+    enable_language(OBJCXX)
+    set(IDYLLWILD_UPDATE_FEED
+        "https://github.com/${IDYLLWILD_UPDATE_REPOSITORY}/releases/download/${IDYLLWILD_UPDATE_TAG}/appcast.xml")
+    target_sources(IdyllwildApp PRIVATE macos/updates.mm)
+    target_compile_options(IdyllwildApp PRIVATE
+        "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>"
+        "$<$<COMPILE_LANGUAGE:OBJCXX>:-F${IDYLLWILD_SPARKLE_DIR}>")
+    target_compile_definitions(IdyllwildApp PRIVATE IDYLLWILD_MAC_UPDATES
+        IDYLLWILD_UPDATE_REPOSITORY="${IDYLLWILD_UPDATE_REPOSITORY}"
+        IDYLLWILD_UPDATE_BUILD=${IDYLLWILD_UPDATE_BUILD})
+    target_link_libraries(IdyllwildApp PRIVATE "${IDYLLWILD_SPARKLE_DIR}/Sparkle.framework" "-framework Foundation")
+    set_target_properties(IdyllwildApp PROPERTIES
+        OBJCXX_STANDARD 17
+        OBJCXX_STANDARD_REQUIRED TRUE
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.idyllwild.IdyllwildApp
+        MACOSX_BUNDLE_BUNDLE_VERSION "${IDYLLWILD_UPDATE_BUILD}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.0"
+        BUILD_RPATH "@executable_path/../Frameworks")
+    add_custom_command(TARGET IdyllwildApp POST_BUILD
+        COMMAND ditto "${IDYLLWILD_SPARKLE_DIR}/Sparkle.framework"
+            "$<TARGET_BUNDLE_DIR:IdyllwildApp>/Contents/Frameworks/Sparkle.framework"
+        VERBATIM)
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS IdyllwildApp
     BUNDLE DESTINATION .
