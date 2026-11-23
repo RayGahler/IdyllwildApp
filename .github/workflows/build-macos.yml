@@ -1,0 +1,40 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.3'
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtmultimedia
+
+      - name: Build app
+        run: |
+          qt-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build --parallel
+
+      - name: Create disk image
+        working-directory: build
+        run: macdeployqt IdyllwildApp.app -dmg
+
+      - name: Upload disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: IdyllwildApp-macOS-arm64
+          path: build/IdyllwildApp.dmg
+          if-no-files-found: error
