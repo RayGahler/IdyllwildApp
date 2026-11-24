@@ -9,17 +9,27 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="mainLayout">
     <item>
+     <layout class="QVBoxLayout" name="brandLayout">
+      <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>150</width><height>150</height></size></property><property name="maximumSize"><size><width>150</width><height>150</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+      <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN INQUIRY FORM PANEL</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">color: white; background-color: #1f4d3a; border: 2px solid white; border-radius: 5px; padding: 5px 12px;</string></property></widget></item>
+     </layout>
+    </item>
+    <item alignment="Qt::AlignHCenter">
      <widget class="QGroupBox" name="signInGroup">
       <property name="title"><string>Admin sign in</string></property>
-      <layout class="QHBoxLayout" name="signInLayout">
+      <property name="maximumSize"><size><width>500</width><height>16777215</height></size></property>
+      <layout class="QVBoxLayout" name="signInLayout">
        <item><widget class="QLineEdit" name="emailEdit"><property name="placeholderText"><string>Admin email</string></property></widget></item>
        <item><widget class="QLineEdit" name="passwordEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Password</string></property></widget></item>
-       <item><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
-       <item><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign out</string></property></widget></item>
+       <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
+       <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign out</string></property></widget></item>
       </layout>
      </widget>
     </item>
     <item>
+     <widget class="QWidget" name="workspaceWidget">
+      <layout class="QVBoxLayout" name="workspaceLayout">
+       <item>
      <layout class="QHBoxLayout" name="lookupLayout">
       <item><widget class="QLabel" name="codeLabel"><property name="text"><string>Inquiry code</string></property></widget></item>
       <item><widget class="QLineEdit" name="codeEdit"><property name="placeholderText"><string>IDY-ABC123</string></property></widget></item>
@@ -30,7 +40,7 @@
       </widget></item>
      </layout>
     </item>
-    <item>
+       <item>
      <layout class="QHBoxLayout" name="inquiryActions">
       <item><spacer name="inquiryActionsSpacer">
        <property name="orientation"><enum>Qt::Horizontal</enum></property>
@@ -49,7 +59,7 @@
       </widget></item>
      </layout>
     </item>
-    <item>
+       <item>
      <widget class="QTabWidget" name="inquiryTabs">
       <widget class="QWidget" name="pendingTab">
        <attribute name="title"><string>Pending Inquiries</string></attribute>
@@ -86,7 +96,7 @@
              <item row="7" column="0"><widget class="QLabel" name="pendingAddressLabel"><property name="text"><string>Address</string></property></widget></item>
              <item row="7" column="1"><widget class="QPlainTextEdit" name="pendingAddressEdit"/></item>
              <item row="8" column="0"><widget class="QLabel" name="pendingStatusLabel"><property name="text"><string>Public status</string></property></widget></item>
-             <item row="8" column="1"><widget class="QLineEdit" name="pendingStatusEdit"><property name="text"><string>Received</string></property></widget></item>
+            <item row="8" column="1"><widget class="QComboBox" name="pendingStatusEdit"/></item>
              <item row="9" column="0"><widget class="QLabel" name="pendingMessageLabel"><property name="text"><string>Public message</string></property></widget></item>
              <item row="9" column="1"><widget class="QPlainTextEdit" name="pendingMessageEdit"/></item>
             </layout>
@@ -127,8 +137,8 @@
             <item row="0" column="1"><widget class="QLineEdit" name="publicDeviceEdit"/></item>
             <item row="1" column="0"><widget class="QLabel" name="publicModelLabel"><property name="text"><string>Model</string></property></widget></item>
             <item row="1" column="1"><widget class="QLineEdit" name="publicModelEdit"/></item>
-            <item row="2" column="0"><widget class="QLabel" name="statusLabel"><property name="text"><string>Status</string></property></widget></item>
-            <item row="2" column="1"><widget class="QLineEdit" name="statusEdit"/></item>
+            <item row="2" column="0"><widget class="QLabel" name="statusLabel"><property name="text"><string>Public status</string></property></widget></item>
+            <item row="2" column="1"><widget class="QComboBox" name="statusEdit"/></item>
             <item row="3" column="0"><widget class="QLabel" name="publicMessageLabel"><property name="text"><string>Public message</string></property></widget></item>
             <item row="3" column="1"><widget class="QPlainTextEdit" name="publicMessageEdit"/></item>
            </layout>
@@ -143,7 +153,8 @@
        <layout class="QVBoxLayout" name="privateCollectionLayout">
         <item>
          <layout class="QHBoxLayout" name="privateCollectionToolbar">
-          <item><widget class="QPushButton" name="refreshPrivateButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QPushButton" name="refreshPrivateButton"><property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QComboBox" name="privateInquiryFilter"><property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="toolTip"><string>Filter inquiries by status category</string></property></widget></item>
           <item><widget class="QLabel" name="privateSelectedCodeLabel"><property name="text"><string>Select an inquiry</string></property></widget></item>
          </layout>
         </item>
@@ -201,7 +212,12 @@
        </layout>
       </widget>
      </widget>
+       </item>
+      </layout>
+     </widget>
     </item>
+    <item><widget class="QLabel" name="websiteLabel"><property name="text"><string>&lt;a href="https://www.idyllwildelectronics.com/"&gt;www.idyllwildelectronics.com&lt;/a&gt;</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="openExternalLinks"><bool>true</bool></property></widget></item>
+    <item><widget class="QLabel" name="copyrightLabel"><property name="text"><string>2026-2027 Idyllwild Electronic Repair LLC &amp; Ray Gahler. All Rights Reserved</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
    </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>

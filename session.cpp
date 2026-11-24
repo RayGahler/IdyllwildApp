@@ -66,6 +66,8 @@ void MainIdyll::signIn()
         ui->signOutButton->setEnabled(true);
         ui->inquiryTabs->setEnabled(true);
         ui->statusbar->showMessage(QStringLiteral("Signed in. Enter an inquiry code to load records."));
+        menuBar()->show();
+        showAuthenticatedWorkspace();
         ui->loadButton->setEnabled(true);
         ui->createInquiryButton->setEnabled(true);
         ui->createContactButton->setEnabled(true);
@@ -82,6 +84,13 @@ void MainIdyll::signIn()
 
 void MainIdyll::signOut()
 {
+    ui->workspaceWidget->hide();
+    menuBar()->hide();
+    ui->signInGroup->setTitle(QStringLiteral("Admin sign in"));
+    ui->emailEdit->show();
+    ui->passwordEdit->show();
+    ui->signInButton->show();
+    ui->signOutButton->hide();
     ++sessionGeneration;
     pendingTimer.stop();
     pendingSound.stop();
@@ -126,11 +135,11 @@ void MainIdyll::signOut()
     ui->pendingProblemEdit->clear();
     setPreferredContact(*ui->pendingPreferredEdit);
     ui->pendingAddressEdit->clear();
-    ui->pendingStatusEdit->setText(QStringLiteral("Received"));
+    ui->pendingStatusEdit->setCurrentIndex(0);
     ui->pendingMessageEdit->clear();
     ui->publicDeviceEdit->clear();
     ui->publicModelEdit->clear();
-    ui->statusEdit->clear();
+    ui->statusEdit->setCurrentIndex(0);
     ui->publicMessageEdit->clear();
     ui->nameEdit->clear();
     ui->phoneEdit->clear();

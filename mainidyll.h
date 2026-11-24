@@ -2,11 +2,13 @@
 #define MAINIDYLL_H
 
 #include <QMainWindow>
+#include <QResizeEvent>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QSet>
+#include <QHash>
 #include <QSoundEffect>
 #include <QTimer>
 #include <QString>
@@ -26,6 +28,9 @@ class MainIdyll : public QMainWindow
 public:
     MainIdyll(QWidget *parent = nullptr);
     ~MainIdyll();
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     void signIn();
@@ -76,6 +81,9 @@ private:
 
     void showError(const QString &message);
     void updateButtons();
+    void showAuthenticatedWorkspace();
+    void applyPrivateInquiryFilter();
+    void applyPrivateInquiryStatus(QListWidgetItem *item);
 
     Ui::MainIdyll *ui;
     QNetworkAccessManager network;
@@ -93,6 +101,7 @@ private:
     QString loadedCode;
     QString publicSelectedCode;
     QString privateSelectedCode;
+    QHash<QString, QString> publicStatusByCode;
     bool publicLoaded = false;
     bool privateLoaded = false;
     bool publicExists = false;

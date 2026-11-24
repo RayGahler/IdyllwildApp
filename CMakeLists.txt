@@ -29,6 +29,7 @@ set(PROJECT_SOURCES
         preferredcontact.cpp
         preferredcontact.h
         sounds.qrc
+        branding.qrc
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

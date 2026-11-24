@@ -40,11 +40,13 @@ void MainIdyll::openCreateInquiry()
     auto *publicForm = new QFormLayout(publicGroup);
     auto *device = new QLineEdit(publicGroup);
     auto *model = new QLineEdit(publicGroup);
-    auto *status = new QLineEdit(QStringLiteral("Received"), publicGroup);
+    auto *status = new QComboBox(publicGroup);
+    status->addItems({QStringLiteral("Recieved"), QStringLiteral("In Repair"), QStringLiteral("Done!"),
+                      QStringLiteral("Canceled"), QStringLiteral("On Hold")});
     auto *publicMessage = new QPlainTextEdit(publicGroup);
     publicForm->addRow(QStringLiteral("Device"), device);
     publicForm->addRow(QStringLiteral("Model"), model);
-    publicForm->addRow(QStringLiteral("Status"), status);
+    publicForm->addRow(QStringLiteral("Public status"), status);
     publicForm->addRow(QStringLiteral("Public message"), publicMessage);
     layout->addWidget(publicGroup);
 
@@ -83,7 +85,7 @@ void MainIdyll::openCreateInquiry()
         postNewInquiry(codeEdit->text(), {
             {"device", device->text().trimmed()},
             {"model", model->text().trimmed()},
-            {"status", status->text().trimmed()},
+            {"status", status->currentText().trimmed()},
             {"publicMessage", publicMessage->toPlainText().trimmed()}
         }, {
             {"name", name->text().trimmed()},

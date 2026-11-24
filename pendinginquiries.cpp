@@ -206,6 +206,11 @@ void MainIdyll::loadPendingInquiry(const QString &displayCode)
         ui->pendingEmailEdit->setText(readStringField(selectedPendingData, "email"));
         ui->pendingDeviceEdit->setText(readStringField(selectedPendingData, "device"));
         ui->pendingModelEdit->setText(readStringField(selectedPendingData, "model"));
+        QString status = readStringField(selectedPendingData, "status");
+        if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
+            status = QStringLiteral("Recieved");
+        int statusIndex = ui->pendingStatusEdit->findText(status, Qt::MatchFixedString);
+        ui->pendingStatusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
         ui->pendingProblemEdit->setPlainText(readStringField(selectedPendingData, "problem"));
         setPreferredContact(*ui->pendingPreferredEdit, readStringField(selectedPendingData, "preferredContact"));
         setPendingFieldsEnabled(true);
@@ -241,7 +246,7 @@ void MainIdyll::promotePendingInquiry()
         {"inquiryCode", pendingCode},
         {"device", device},
         {"model", model},
-        {"status", ui->pendingStatusEdit->text().trimmed()},
+        {"status", ui->pendingStatusEdit->currentText().trimmed()},
         {"publicMessage", ui->pendingMessageEdit->toPlainText().trimmed()}
     };
     const QJsonObject privateData{

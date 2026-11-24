@@ -5,6 +5,8 @@
 #include <ui_mainidyll.h>
 
 #include <QDateTime>
+#include <QBrush>
+#include <QColor>
 #include <QJsonDocument>
 #include <QNetworkRequest>
 #include <QUrlQuery>
@@ -69,6 +71,8 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
 
         auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
         list->clear();
+        if (isPublic)
+            publicStatusByCode.clear();
         if (isPublic) {
             publicSelectedCode.clear();
             ui->saveButton->setEnabled(false);
@@ -80,13 +84,72 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         }
         for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
             const QString documentId = document.value("name").toString().section('/', -1);
-            const QString code = readStringField(document.value("fields").toObject(), "inquiryCode");
-            auto *item = new QListWidgetItem(code.isEmpty() ? documentId : code, list);
+            const auto fields = document.value("fields").toObject();
+            const QString code = readStringField(fields, "inquiryCode");
+            const QString displayCode = code.isEmpty() ? documentId : code;
+            auto *item = new QListWidgetItem(displayCode, list);
             item->setData(Qt::UserRole, documentId);
+            item->setData(Qt::UserRole + 1, displayCode);
+            if (isPublic) {
+                const QString status = readStringField(fields, "status");
+                publicStatusByCode.insert(displayCode, status);
+                publicStatusByCode.insert(documentId, status);
+            } else {
+                applyPrivateInquiryStatus(item);
+            }
         }
+        if (isPublic) {
+            for (int row = 0; row < ui->privateInquiryList->count(); ++row)
+                applyPrivateInquiryStatus(ui->privateInquiryList->item(row));
+        }
+        applyPrivateInquiryFilter();
         refreshButton->setEnabled(true);
         updateDeleteButton();
     });
+}
+
+void MainIdyll::applyPrivateInquiryStatus(QListWidgetItem *item)
+{
+    if (!item)
+        return;
+    const QString code = item->data(Qt::UserRole + 1).toString();
+    const QString status = publicStatusByCode.value(code).trimmed();
+    const QString normalized = status.toLower();
+    item->setText(code);
+    item->setToolTip(status.isEmpty() ? tr("Public status unavailable") : tr("Public status: %1").arg(status));
+    item->setBackground(QBrush());
+    item->setForeground(QBrush());
+    if (normalized == QStringLiteral("done!")) {
+        item->setForeground(QColor(QStringLiteral("#2e7d32")));
+        item->setBackground(QColor(QStringLiteral("#dff2df")));
+        item->setToolTip(tr("Completed — public status: %1").arg(status));
+    } else if (normalized == QStringLiteral("in repair") || normalized == QStringLiteral("recieved")
+               || normalized == QStringLiteral("received")) {
+        item->setText(code + tr(" — in-progress"));
+        item->setForeground(QColor(QStringLiteral("#CC7E3E")));
+        item->setBackground(QColor(QStringLiteral("#fff0df")));
+        item->setToolTip(tr("In-progress — public status: %1").arg(status));
+    } else if (normalized == QStringLiteral("canceled") || normalized == QStringLiteral("on hold")) {
+        item->setForeground(QColor(QStringLiteral("#c62828")));
+        item->setBackground(QColor(QStringLiteral("#fde2e2")));
+        item->setToolTip(tr("Canceled or on hold — public status: %1").arg(status));
+    }
+}
+
+void MainIdyll::applyPrivateInquiryFilter()
+{
+    const QString filter = ui->privateInquiryFilter->currentText();
+    for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
+        auto *item = ui->privateInquiryList->item(row);
+        const QString status = publicStatusByCode.value(item->data(Qt::UserRole + 1).toString()).trimmed().toLower();
+        const bool completed = status == QStringLiteral("done!");
+        const bool canceled = status == QStringLiteral("canceled") || status == QStringLiteral("on hold");
+        const bool visible = filter == tr("All inquiries")
+            || (filter == tr("Completed") && completed)
+            || (filter == tr("Canceled") && canceled)
+            || (filter == tr("New Inquiry") && !completed && !canceled);
+        item->setHidden(!visible);
+    }
 }
 
 void MainIdyll::loadCollectionRecord(const QString &collection, const QString &code)
@@ -111,7 +174,11 @@ void MainIdyll::loadCollectionRecord(const QString &collection, const QString &c
             ui->publicSelectedCodeLabel->setText(code);
             ui->publicDeviceEdit->setText(readStringField(fields, "device"));
             ui->publicModelEdit->setText(readStringField(fields, "model"));
-            ui->statusEdit->setText(readStringField(fields, "status"));
+            QString status = readStringField(fields, "status");
+            if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
+                status = QStringLiteral("Recieved");
+            int statusIndex = ui->statusEdit->findText(status, Qt::MatchFixedString);
+            ui->statusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
             ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
             if (!savingPublic)
                 ui->saveButton->setEnabled(true);
@@ -171,7 +238,11 @@ void MainIdyll::loadPublicRecord()
             const auto fields = response.value("fields").toObject();
             ui->publicDeviceEdit->setText(readStringField(fields, "device"));
             ui->publicModelEdit->setText(readStringField(fields, "model"));
-            ui->statusEdit->setText(readStringField(fields, "status"));
+            QString status = readStringField(fields, "status");
+            if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
+                status = QStringLiteral("Recieved");
+            int statusIndex = ui->statusEdit->findText(status, Qt::MatchFixedString);
+            ui->statusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
             ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
             publicExists = true;
         }
@@ -219,7 +290,7 @@ QJsonObject MainIdyll::publicFields() const
     return {
         {"device", ui->publicDeviceEdit->text().trimmed()},
         {"model", ui->publicModelEdit->text().trimmed()},
-        {"status", ui->statusEdit->text()},
+        {"status", ui->statusEdit->currentText()},
         {"publicMessage", ui->publicMessageEdit->toPlainText()}
     };
 }
@@ -303,13 +374,24 @@ void MainIdyll::saveSingleRecord(const QString &collection, const QJsonObject &f
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     auto *reply = network.sendCustomRequest(
         request, "PATCH", QJsonDocument(QJsonObject{{"fields", encoded}}).toJson());
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code] {
+    const bool updatesStatus = isPublic && fields.contains(QStringLiteral("status"));
+    const QString savedStatus = fields.value(QStringLiteral("status")).toString();
+    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, updatesStatus, savedStatus] {
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             showError(response.value("error").toObject().value("message").toString(reply->errorString()));
         } else {
             ui->statusbar->showMessage(QStringLiteral("Saved %1 inquiry %2.")
                                            .arg(isPublic ? QStringLiteral("public") : QStringLiteral("private"), code));
+            if (updatesStatus) {
+                publicStatusByCode.insert(code, savedStatus);
+                for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
+                    auto *item = ui->privateInquiryList->item(row);
+                    if (item->data(Qt::UserRole + 1).toString() == code)
+                        applyPrivateInquiryStatus(item);
+                }
+                applyPrivateInquiryFilter();
+            }
         }
         if (isPublic)
             savingPublic = false;
