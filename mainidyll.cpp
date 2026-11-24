@@ -44,6 +44,7 @@ MainIdyll::MainIdyll(QWidget *parent)
         if (ui->inquiryTabs->widget(index) == ui->pendingTab)
             refreshPendingInquiries();
     });
+    connect(ui->permanentlyDeleteButton, &QPushButton::clicked, this, &MainIdyll::permanentlyDeleteInquiry);
     connect(ui->refreshDeletedButton, &QPushButton::clicked, this, &MainIdyll::refreshDeletedInquiries);
     connect(ui->deletedInquiryList, &QListWidget::currentItemChanged, this, &MainIdyll::showDeletedInquiry);
     ui->deletedSplitter->setStretchFactor(1, 2);

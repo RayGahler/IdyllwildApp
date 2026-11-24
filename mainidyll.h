@@ -47,6 +47,7 @@ private:
     void removePendingInquiryFromList(const QString &code);
 
     void refreshCollection(const QString &collection);
+    void loadCollectionPage(const QString &collection, const QString &pageToken, QJsonArray documents);
     void loadCollectionRecord(const QString &collection, const QString &code);
     void loadInquiry();
     void loadPublicRecord();
@@ -61,6 +62,9 @@ private:
     void refreshDeletedInquiries();
     void loadDeletedPage(const QString &pageToken);
     void showDeletedInquiry(QListWidgetItem *item);
+    void updatePermanentDeleteButton();
+    void permanentlyDeleteInquiry();
+    QNetworkReply *commitArchiveWrites(const QJsonArray &writes);
     QListWidgetItem *selectedInquiry() const;
     void updateDeleteButton();
     void updatePendingDeleteButton();
@@ -95,6 +99,7 @@ private:
     bool savingPrivate = false;
     QString pendingCode;
     QJsonObject selectedPendingData;
+    QString selectedPendingReceivedAt;
     bool promotingPublicDone = false;
     bool promotingPrivateDone = false;
 };

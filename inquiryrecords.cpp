@@ -9,6 +9,8 @@
 #include <QNetworkRequest>
 #include <QUrlQuery>
 
+#include <utility>
+
 using Firestore::firestoreFields;
 using Firestore::inquiryCollectionUrl;
 using Firestore::inquiryUrl;
@@ -20,37 +22,52 @@ void MainIdyll::refreshCollection(const QString &collection)
 {
     if (idToken.isEmpty())
         return;
-    const bool isPublic = collection == "publicInquiries";
-    auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
-    auto *refreshButton = isPublic ? ui->refreshPublicButton : ui->refreshPrivateButton;
+    auto *refreshButton = collection == "publicInquiries" ? ui->refreshPublicButton : ui->refreshPrivateButton;
+    if (!refreshButton->isEnabled())
+        return;
+
     refreshButton->setEnabled(false);
     updateDeleteButton();
-    QNetworkRequest request(inquiryCollectionUrl(collection));
+    loadCollectionPage(collection, {}, {});
+}
+
+void MainIdyll::loadCollectionPage(const QString &collection, const QString &pageToken, QJsonArray documents)
+{
+    QUrl url = inquiryCollectionUrl(collection);
+    if (!pageToken.isEmpty()) {
+        QUrlQuery query;
+        query.addQueryItem("pageToken", pageToken);
+        url.setQuery(query);
+    }
+    QNetworkRequest request(url);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
+    const auto session = sessionGeneration;
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, collection, list, refreshButton, isPublic] {
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (isNotFound(reply, response)) {
-            list->clear();
-            if (isPublic) {
-                publicSelectedCode.clear();
-                ui->saveButton->setEnabled(false);
-            } else {
-                privateSelectedCode.clear();
-                ui->savePrivateButton->setEnabled(false);
-            }
-            refreshButton->setEnabled(true);
-            updateDeleteButton();
-            reply->deleteLater();
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, session, collection, documents = std::move(documents)]() mutable {
+        reply->deleteLater();
+        if (session != sessionGeneration)
             return;
-        }
-        if (reply->error() != QNetworkReply::NoError) {
+
+        const bool isPublic = collection == "publicInquiries";
+        auto *refreshButton = isPublic ? ui->refreshPublicButton : ui->refreshPrivateButton;
+        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
+        if (reply->error() != QNetworkReply::NoError && !isNotFound(reply, response)) {
             showError(response.value("error").toObject().value("message").toString(reply->errorString()));
             refreshButton->setEnabled(true);
             updateDeleteButton();
-            reply->deleteLater();
             return;
         }
+
+        for (const auto &entry : response.value("documents").toArray())
+            documents.append(entry);
+        const QString nextPage = response.value("nextPageToken").toString();
+        if (!nextPage.isEmpty()) {
+            loadCollectionPage(collection, nextPage, std::move(documents));
+            return;
+        }
+
+        auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
         list->clear();
         if (isPublic) {
             publicSelectedCode.clear();
@@ -61,18 +78,14 @@ void MainIdyll::refreshCollection(const QString &collection)
             ui->savePrivateButton->setEnabled(false);
             ui->privateSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
         }
-        const auto documents = response.value("documents").toArray();
-        for (const auto &entry : documents) {
-            const auto document = entry.toObject();
+        for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
             const QString documentId = document.value("name").toString().section('/', -1);
-            const auto fields = document.value("fields").toObject();
-            const QString code = readStringField(fields, "inquiryCode");
+            const QString code = readStringField(document.value("fields").toObject(), "inquiryCode");
             auto *item = new QListWidgetItem(code.isEmpty() ? documentId : code, list);
             item->setData(Qt::UserRole, documentId);
         }
         refreshButton->setEnabled(true);
         updateDeleteButton();
-        reply->deleteLater();
     });
 }
 

@@ -167,6 +167,10 @@
         <item>
          <layout class="QHBoxLayout" name="deletedToolbar">
           <item><widget class="QPushButton" name="refreshDeletedButton"><property name="text"><string>Refresh list</string></property></widget></item>
+          <item><widget class="QPushButton" name="permanentlyDeleteButton">
+           <property name="enabled"><bool>false</bool></property>
+           <property name="text"><string>Permanently delete</string></property>
+          </widget></item>
           <item><widget class="QLabel" name="deletedListStatus"><property name="text"><string/></property></widget></item>
          </layout>
         </item>

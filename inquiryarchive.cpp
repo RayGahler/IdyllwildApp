@@ -24,6 +24,13 @@ using Firestore::stringField;
 
 namespace {
 const QString deletedCollection = QStringLiteral("deletedInquiries");
+constexpr int archiveIdRole = Qt::UserRole + 1;
+constexpr int archiveVersionRole = Qt::UserRole + 2;
+
+QString documentsPath()
+{
+    return QStringLiteral("projects/%1/databases/(default)/documents").arg(projectId);
+}
 }
 
 void MainIdyll::refreshDeletedInquiries()
@@ -33,6 +40,7 @@ void MainIdyll::refreshDeletedInquiries()
 
     ui->refreshDeletedButton->setEnabled(false);
     ui->deletedInquiryList->clear();
+    updatePermanentDeleteButton();
     ui->deletedInquiryDetails->clear();
     ui->deletedListStatus->setText(tr("Loading deleted inquiries…"));
     loadDeletedPage({});
@@ -59,6 +67,7 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             ui->refreshDeletedButton->setEnabled(true);
+            updatePermanentDeleteButton();
             const auto error = response.value("error").toObject();
             if (error.value("status").toString() == "PERMISSION_DENIED"
                 || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 403) {
@@ -73,9 +82,10 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
         for (const auto &entry : response.value("documents").toArray()) {
             const auto document = entry.toObject();
             const auto fields = document.value("fields").toObject();
+            const QString archiveId = document.value("name").toString().section('/', -1);
             QString code = readStringField(fields, "inquiryCode");
             if (code.isEmpty())
-                code = document.value("name").toString().section('/', -1);
+                code = archiveId;
             const auto timestamp = fields.value("deletedAt").toObject().value("timestampValue").toString();
             const auto deletedAt = QDateTime::fromString(timestamp, Qt::ISODate);
             const QString label = deletedAt.isValid()
@@ -83,6 +93,8 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
                 : code;
             auto *item = new QListWidgetItem(label, ui->deletedInquiryList);
             item->setData(Qt::UserRole, fields);
+            item->setData(archiveIdRole, archiveId);
+            item->setData(archiveVersionRole, document.value("updateTime").toString());
         }
 
         const QString nextPage = response.value("nextPageToken").toString();
@@ -92,6 +104,7 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
         }
 
         ui->refreshDeletedButton->setEnabled(true);
+        updatePermanentDeleteButton();
         ui->deletedListStatus->setText(ui->deletedInquiryList->count() == 0
                                           ? tr("No deleted inquiries.")
                                           : QString());
@@ -100,6 +113,7 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
 
 void MainIdyll::showDeletedInquiry(QListWidgetItem *item)
 {
+    updatePermanentDeleteButton();
     ui->deletedInquiryDetails->clear();
     if (!item)
         return;
@@ -132,6 +146,76 @@ void MainIdyll::showDeletedInquiry(QListWidgetItem *item)
     appendRecord(tr("Public record"), fields.value("publicRecord").toObject());
     appendRecord(tr("Private record"), fields.value("privateRecord").toObject());
     ui->deletedInquiryDetails->setPlainText(sections.join("\n\n"));
+}
+
+void MainIdyll::updatePermanentDeleteButton()
+{
+    const auto *item = ui->deletedInquiryList->currentItem();
+    ui->permanentlyDeleteButton->setEnabled(!idToken.isEmpty() && ui->refreshDeletedButton->isEnabled()
+        && item && !item->data(archiveIdRole).toString().isEmpty()
+        && !item->data(archiveVersionRole).toString().isEmpty());
+}
+
+void MainIdyll::permanentlyDeleteInquiry()
+{
+    const auto *item = ui->deletedInquiryList->currentItem();
+    if (!item || !ui->permanentlyDeleteButton->isEnabled())
+        return;
+
+    const auto session = sessionGeneration;
+    const QString archiveId = item->data(archiveIdRole).toString();
+    const QString updateTime = item->data(archiveVersionRole).toString();
+    const QString label = item->text();
+    QMessageBox confirmation(QMessageBox::Warning, tr("Permanently delete inquiry"),
+        tr("Permanently delete %1 from the database? This cannot be undone.").arg(label),
+        QMessageBox::Yes | QMessageBox::Cancel, this);
+    confirmation.setTextFormat(Qt::PlainText);
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    if (confirmation.exec() != QMessageBox::Yes || session != sessionGeneration)
+        return;
+
+    ui->refreshDeletedButton->setEnabled(false);
+    updatePermanentDeleteButton();
+    ui->deletedListStatus->setText(tr("Deleting archived inquiry…"));
+
+    const QString name = documentsPath() + "/" + deletedCollection + "/" + archiveId;
+    auto *reply = commitArchiveWrites({QJsonObject{
+        {"delete", name},
+        {"currentDocument", QJsonObject{{"updateTime", updateTime}}}
+    }});
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, archiveId, label] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
+            return;
+
+        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
+        ui->refreshDeletedButton->setEnabled(true);
+        if (reply->error() != QNetworkReply::NoError || response.contains("error")) {
+            ui->deletedListStatus->setText(tr("Could not permanently delete the inquiry."));
+            showError(firestoreError(response.value("error").toObject(), reply->errorString()));
+            updatePermanentDeleteButton();
+            return;
+        }
+
+        auto *list = ui->deletedInquiryList;
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->data(archiveIdRole).toString() == archiveId) {
+                delete list->takeItem(row);
+                break;
+            }
+        }
+        updatePermanentDeleteButton();
+        ui->deletedListStatus->setText(list->count() == 0 ? tr("No deleted inquiries.") : QString());
+        ui->statusbar->showMessage(tr("Permanently deleted %1.").arg(label));
+    });
+}
+
+QNetworkReply *MainIdyll::commitArchiveWrites(const QJsonArray &writes)
+{
+    QNetworkRequest request(QUrl("https://firestore.googleapis.com/v1/" + documentsPath() + ":commit"));
+    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    return network.post(request, QJsonDocument(QJsonObject{{"writes", writes}}).toJson(QJsonDocument::Compact));
 }
 
 QListWidgetItem *MainIdyll::selectedInquiry() const
@@ -195,13 +279,7 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
     ui->centralwidget->setEnabled(false);
     ui->statusbar->showMessage(tr("Archiving inquiry %1…").arg(label));
 
-    const QString documentsPath = QStringLiteral("projects/%1/databases/(default)/documents").arg(projectId);
-    const auto post = [this, documentsPath](const QString &method, const QJsonObject &body) {
-        QNetworkRequest request(QUrl("https://firestore.googleapis.com/v1/" + documentsPath + method));
-        request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-        return network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
-    };
+    const QString path = documentsPath();
     const auto fail = [this, label](const QString &message) {
         ui->centralwidget->setEnabled(true);
         updateDeleteButton();
@@ -228,14 +306,14 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
         {"deletedAt", QJsonObject{{"timestampValue", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}}}
     };
 
-    const auto read = [this, archive, post, fail, documentsPath, code, label, fromPending](
+    const auto read = [this, archive, fail, path, code, label, fromPending](
                           const QString &collection, const QString &field) {
-        const QString name = documentsPath + "/" + collection + "/" + code;
+        const QString name = path + "/" + collection + "/" + code;
         QNetworkRequest request(inquiryUrl(collection, code));
         request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
         auto *reply = network.get(request);
         connect(reply, &QNetworkReply::finished, this,
-                [this, reply, archive, post, fail, documentsPath, collection, name, field, code, label, fromPending] {
+                [this, reply, archive, fail, path, collection, name, field, code, label, fromPending] {
             const auto document = QJsonDocument::fromJson(reply->readAll()).object();
             reply->deleteLater();
             if (archive->failed)
@@ -271,13 +349,13 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
                 return;
             }
 
-            const QString archiveName = documentsPath + "/" + deletedCollection + "/"
+            const QString archiveName = path + "/" + deletedCollection + "/"
                                         + QUuid::createUuid().toString(QUuid::WithoutBraces);
             archive->writes.prepend(QJsonObject{
                 {"update", QJsonObject{{"name", archiveName}, {"fields", archive->fields}}},
                 {"currentDocument", QJsonObject{{"exists", false}}}
             });
-            auto *commit = post(":commit", {{"writes", archive->writes}});
+            auto *commit = commitArchiveWrites(archive->writes);
             connect(commit, &QNetworkReply::finished, this, [this, commit, fail, code, label, fromPending] {
                 const auto result = QJsonDocument::fromJson(commit->readAll()).object();
                 commit->deleteLater();

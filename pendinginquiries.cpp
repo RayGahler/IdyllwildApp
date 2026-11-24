@@ -96,9 +96,10 @@ void MainIdyll::applyPendingList(const QJsonArray &documents)
         existing.insert(item->data(Qt::UserRole).toString(), item);
     }
 
+    auto *selected = list->currentItem();
     QSet<QString> currentIds;
-    for (const auto &entry : documents) {
-        const auto document = entry.toObject();
+    int targetRow = 0;
+    for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
         const QString id = document.value("name").toString().section('/', -1);
         if (id.isEmpty() || currentIds.contains(id))
             continue;
@@ -106,19 +107,26 @@ void MainIdyll::applyPendingList(const QJsonArray &documents)
         const QString code = readStringField(document.value("fields").toObject(), "inquiryCode");
         auto *item = existing.take(id);
         if (!item) {
-            item = new QListWidgetItem(list);
+            item = new QListWidgetItem;
             item->setData(Qt::UserRole, id);
+            list->insertItem(targetRow, item);
+        } else if (list->row(item) != targetRow) {
+            list->insertItem(targetRow, list->takeItem(list->row(item)));
         }
         item->setText(code.isEmpty() ? id : code);
+        ++targetRow;
     }
     for (auto *item : existing) {
-        if (list->currentItem() == item)
-            list->setCurrentItem(nullptr);
+        if (selected == item)
+            selected = nullptr;
         delete list->takeItem(list->row(item));
     }
+    if (list->currentItem() != selected || (selected && !selected->isSelected()))
+        list->setCurrentItem(selected);
     if (!pendingCode.isEmpty() && !currentIds.contains(pendingCode)) {
         pendingCode.clear();
         selectedPendingData = {};
+        selectedPendingReceivedAt.clear();
         ui->pendingSelectedCodeLabel->setText(tr("None"));
         setPendingFieldsEnabled(false);
         ui->promotePendingButton->setEnabled(false);
@@ -191,6 +199,7 @@ void MainIdyll::loadPendingInquiry(const QString &displayCode)
             return;
         }
         selectedPendingData = response.value("fields").toObject();
+        selectedPendingReceivedAt = Firestore::inquiryReceivedAt(response).toUTC().toString(Qt::ISODateWithMs);
         ui->pendingSelectedCodeLabel->setText(displayCode);
         ui->pendingNameEdit->setText(readStringField(selectedPendingData, "name"));
         ui->pendingPhoneEdit->setText(readStringField(selectedPendingData, "phone"));
@@ -256,6 +265,8 @@ void MainIdyll::promotePendingInquiry()
         url.setQuery(query);
         QJsonObject fields = firestoreFields(data);
         fields.insert("createdAt", QJsonObject{{"timestampValue", now}});
+        if (!selectedPendingReceivedAt.isEmpty())
+            fields.insert("receivedAt", QJsonObject{{"timestampValue", selectedPendingReceivedAt}});
         fields.insert("updatedAt", QJsonObject{{"timestampValue", now}});
         QNetworkRequest request(url);
         request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
@@ -334,6 +345,7 @@ void MainIdyll::removePendingInquiryFromList(const QString &code)
     if (pendingCode == code) {
         pendingCode.clear();
         selectedPendingData = {};
+        selectedPendingReceivedAt.clear();
         ui->pendingSelectedCodeLabel->setText(tr("None"));
         setPendingFieldsEnabled(false);
         ui->promotePendingButton->setEnabled(false);

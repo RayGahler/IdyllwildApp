@@ -96,6 +96,7 @@ void MainIdyll::signOut()
     privateSelectedCode.clear();
     pendingCode.clear();
     selectedPendingData = {};
+    selectedPendingReceivedAt.clear();
     publicLoaded = privateLoaded = false;
     publicExists = privateExists = false;
     savingPublic = savingPrivate = false;
@@ -108,6 +109,8 @@ void MainIdyll::signOut()
     ui->deletedInquiryDetails->clear();
     ui->deletedListStatus->clear();
     ui->refreshDeletedButton->setEnabled(true);
+    ui->refreshPublicButton->setEnabled(true);
+    ui->refreshPrivateButton->setEnabled(true);
     ui->publicInquiryList->clear();
     ui->privateInquiryList->clear();
     ui->pendingSelectedCodeLabel->setText(QStringLiteral("None"));
