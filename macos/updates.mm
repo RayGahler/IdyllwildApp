@@ -26,6 +26,7 @@ QString updateText(const char *text)
 @interface IdyllwildUpdateFeed : NSObject <SPUUpdaterDelegate> {
 @public
     QPointer<QAction> statusAction;
+    bool started;
 }
 @property(copy) NSString *url;
 @end
@@ -81,15 +82,16 @@ QString updateText(const char *text)
 @end
 
 namespace {
-void checkForMacUpdates(QMainWindow &window, QAction *status, QAction *check, bool manual)
+void checkForMacUpdates(QMainWindow &window, IdyllwildUpdateFeed *feed,
+                        SPUStandardUpdaterController *controller, QAction *check, bool manual)
 {
-    static IdyllwildUpdateFeed *feed = [[IdyllwildUpdateFeed alloc] init];
-    static SPUStandardUpdaterController *controller = nil;
-    if (controller && !controller.updater.canCheckForUpdates)
+    if (!check->isEnabled() || (feed->started && !controller.updater.canCheckForUpdates))
+        return;
+    if (!manual && !controller.updater.automaticallyChecksForUpdates)
         return;
 
-    if (!controller)
-        status->setText(updateText("Checking for updates…"));
+    if (!feed->started)
+        feed->statusAction->setText(updateText("Checking for updates…"));
     check->setEnabled(false);
     auto *network = new QNetworkAccessManager(&window);
     const QString repository = QStringLiteral(IDYLLWILD_UPDATE_REPOSITORY);
@@ -100,9 +102,17 @@ void checkForMacUpdates(QMainWindow &window, QAction *status, QAction *check, bo
     request.setTransferTimeout(10000);
     auto *reply = network->get(request);
     QObject::connect(reply, &QNetworkReply::finished, &window,
-                     [reply, network, repository, status, check, manual] {
+                     [reply, network, repository, feed, controller, check, manual] {
         network->deleteLater();
         check->setEnabled(true);
+        auto *status = feed->statusAction.data();
+        if (!status)
+            return;
+        if (!manual && !controller.updater.automaticallyChecksForUpdates) {
+            status->setText(updateText("Automatic updates off"));
+            return;
+        }
+
         const auto response = QJsonDocument::fromJson(reply->readAll());
         if (reply->error() != QNetworkReply::NoError || !response.isArray()) {
             status->setText(updateText("Could not check for updates"));
@@ -140,13 +150,10 @@ void checkForMacUpdates(QMainWindow &window, QAction *status, QAction *check, bo
             return;
         }
 
-        feed->statusAction = status;
         feed.url = [NSString stringWithUTF8String:feedUrl.toUtf8().constData()];
-        if (!controller) {
-            controller = [[SPUStandardUpdaterController alloc] initWithStartingUpdater:NO
-                                                                      updaterDelegate:feed
-                                                                   userDriverDelegate:nil];
+        if (!feed->started) {
             [controller startUpdater];
+            feed->started = true;
         }
         if (manual)
             [controller checkForUpdates:nil];
@@ -158,17 +165,38 @@ void checkForMacUpdates(QMainWindow &window, QAction *status, QAction *check, bo
 
 void setupMacUpdates(QMainWindow &window)
 {
+    static IdyllwildUpdateFeed *feed = [[IdyllwildUpdateFeed alloc] init];
+    static SPUStandardUpdaterController *controller =
+        [[SPUStandardUpdaterController alloc] initWithStartingUpdater:NO
+                                                    updaterDelegate:feed
+                                                 userDriverDelegate:nil];
+
     auto *menu = window.menuBar()->addMenu(updateText("Updates"));
     menu->addAction(updateText("Installed build #%1").arg(IDYLLWILD_UPDATE_BUILD))->setEnabled(false);
-    auto *status = menu->addAction(updateText("Checking for updates…"));
+    const bool automaticUpdates = controller.updater.automaticallyChecksForUpdates;
+    auto *status = menu->addAction(automaticUpdates ? updateText("Checking for updates…")
+                                                  : updateText("Automatic updates off"));
     status->setEnabled(false);
+    feed->statusAction = status;
+
     menu->addSeparator();
+    auto *automatic = menu->addAction(updateText("Automatic updates"));
+    automatic->setCheckable(true);
+    automatic->setChecked(automaticUpdates);
     auto *check = menu->addAction(updateText("Check for Updates…"));
-    QObject::connect(check, &QAction::triggered, &window, [&window, status, check] {
-        checkForMacUpdates(window, status, check, true);
+
+    QObject::connect(automatic, &QAction::toggled, &window, [&window, status, check](bool enabled) {
+        controller.updater.automaticallyChecksForUpdates = enabled;
+        controller.updater.automaticallyDownloadsUpdates = enabled;
+        if (enabled)
+            checkForMacUpdates(window, feed, controller, check, false);
+        else if (!feed->started)
+            status->setText(updateText("Automatic updates off"));
     });
-    QTimer::singleShot(0, &window, [&window, status, check] {
-        if (check->isEnabled())
-            checkForMacUpdates(window, status, check, false);
+    QObject::connect(check, &QAction::triggered, &window, [&window, check] {
+        checkForMacUpdates(window, feed, controller, check, true);
+    });
+    QTimer::singleShot(0, &window, [&window, check] {
+        checkForMacUpdates(window, feed, controller, check, false);
     });
 }
