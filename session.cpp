@@ -15,10 +15,21 @@ using Firestore::firestoreError;
 
 namespace {
 const QString apiKey = QStringLiteral("AIzaSyAUIPxT6zXZPK4ZmFQ5xQj8OzybNmPLnEg");
+#ifdef IDYLLWILD_ENABLE_LOCAL_TEST_ACCOUNT
+const QString localTestUsername = QStringLiteral("admin");
+const QString localTestPassword = QStringLiteral("admin");
+#endif
 }
 
 void MainIdyll::signIn()
 {
+#ifdef IDYLLWILD_ENABLE_LOCAL_TEST_ACCOUNT
+    if (ui->emailEdit->text().trimmed().compare(localTestUsername, Qt::CaseInsensitive) == 0
+        && ui->passwordEdit->text() == localTestPassword) {
+        finishSignIn({}, {}, 0, true);
+        return;
+    }
+#endif
     ui->signInButton->setEnabled(false);
     ui->statusbar->showMessage(QStringLiteral("Signing in…"));
     QNetworkRequest request(QUrl(QStringLiteral(
@@ -57,44 +68,64 @@ void MainIdyll::signIn()
             reply->deleteLater();
             return;
         }
-        idToken = response.value("idToken").toString();
-        refreshToken = response.value("refreshToken").toString();
-        tokenExpiresAt = QDateTime::currentSecsSinceEpoch() + response.value("expiresIn").toString().toLongLong();
-        ui->emailEdit->setEnabled(false);
-        ui->passwordEdit->clear();
-        ui->passwordEdit->setEnabled(false);
-        ui->signInButton->setText(QStringLiteral("Signed in"));
-        ui->signInButton->setEnabled(false);
-        ui->signOutButton->setEnabled(true);
-        ui->inquiryTabs->setEnabled(true);
-        ui->statusbar->showMessage(QStringLiteral("Signed in. Enter an inquiry code to load records."));
-        menuBar()->show();
-        showAuthenticatedWorkspace();
+        finishSignIn(response.value("idToken").toString(),
+                     response.value("refreshToken").toString(),
+                     QDateTime::currentSecsSinceEpoch()
+                         + response.value("expiresIn").toString().toLongLong(), false);
+        reply->deleteLater();
+    });
+}
+
+void MainIdyll::finishSignIn(const QString &token, const QString &refresh, qint64 expiresAt,
+                             bool localTestAccount)
+{
+    localTestMode = localTestAccount;
+    idToken = token;
+    refreshToken = refresh;
+    tokenExpiresAt = expiresAt;
+    ui->emailEdit->setEnabled(false);
+    ui->passwordEdit->clear();
+    ui->passwordEdit->setEnabled(false);
+    ui->signInButton->setText(localTestMode ? tr("Local test") : tr("Signed in"));
+    ui->signInButton->setEnabled(false);
+    ui->signOutButton->setEnabled(true);
+    ui->inquiryTabs->setEnabled(true);
+    menuBar()->show();
+    showAuthenticatedWorkspace();
+
+    if (localTestMode) {
+        ui->signInGroup->setTitle(tr("Local test account · no cloud data"));
+        for (QPushButton *button : {ui->loadButton, ui->deleteInquiryButton,
+                                    ui->createInquiryButton, ui->createContactButton,
+                                    ui->scheduleRepairButton, ui->refreshPendingButton,
+                                    ui->refreshPublicButton, ui->refreshPrivateButton,
+                                    ui->refreshDeletedButton, ui->deletePendingButton,
+                                    ui->promotePendingButton, ui->saveButton,
+                                    ui->savePrivateButton, ui->permanentlyDeleteButton})
+            button->setEnabled(false);
+        ui->statusbar->showMessage(tr("Local test mode: the workspace is empty and does not connect to Firebase."));
+    } else {
         ui->loadButton->setEnabled(true);
         ui->createInquiryButton->setEnabled(true);
         ui->createContactButton->setEnabled(true);
         ui->scheduleRepairButton->setEnabled(true);
         pendingTimer.start();
         refreshPendingInquiries();
-        if (ui->inquiryTabs->currentWidget() == ui->deletedTab)
-            refreshDeletedInquiries();
+        refreshDeletedInquiries();
         refreshCollection("publicInquiries");
         refreshCollection("privateInquiries");
-        const QString emailName = ui->emailEdit->text().trimmed().section(QLatin1Char('@'), 0, 0).trimmed();
-        const QString greetingName = emailName.isEmpty() ? tr("there") : emailName;
-        const int hour = QTime::currentTime().hour();
-        const QString timeGreeting = hour >= 5 && hour < 12 ? tr("Good morning")
-                                     : hour < 17 ? tr("Good afternoon")
-                                     : hour < 21 ? tr("Good evening")
-                                                  : tr("Good night");
-        ui->statusbar->showMessage(QStringLiteral("%1 %2!").arg(timeGreeting, greetingName), 10000);
-        reply->deleteLater();
-    });
+        ui->statusbar->showMessage(tr("Signed in. Enter an inquiry code to load records."));
+    }
+
+    updateGreeting();
+    ui->greetingLabel->show();
 }
 
 void MainIdyll::signOut()
 {
+    localTestMode = false;
     menuBar()->hide();
+    ui->greetingLabel->hide();
     ui->signInGroup->setTitle(QStringLiteral("Admin sign in"));
     ++sessionGeneration;
     pendingTimer.stop();

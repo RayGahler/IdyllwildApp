@@ -58,6 +58,10 @@ endif()
 target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Multimedia)
 
+target_compile_definitions(IdyllwildApp PRIVATE
+    $<$<CONFIG:Debug>:IDYLLWILD_ENABLE_LOCAL_TEST_ACCOUNT>
+)
+
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.

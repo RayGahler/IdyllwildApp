@@ -35,6 +35,8 @@ protected:
 
 private:
     void signIn();
+    void finishSignIn(const QString &token, const QString &refresh, qint64 expiresAt,
+                      bool localTestAccount);
     void signOut();
     void renewPendingSession(bool background);
 
@@ -67,8 +69,9 @@ private:
     void saveSingleRecord(const QString &collection, const QJsonObject &fields);
     void saveRecord(const QString &collection, const QJsonObject &fields);
 
-    void refreshDeletedInquiries();
-    void loadDeletedPage(const QString &pageToken);
+    void refreshDeletedInquiries(bool preserveSelection = false);
+    void loadDeletedPage(const QString &pageToken, bool preserveSelection = false,
+                         const QString &selectedArchiveId = {});
     void showDeletedInquiry(QListWidgetItem *item);
     void updatePermanentDeleteButton();
     void permanentlyDeleteInquiry();
@@ -84,6 +87,7 @@ private:
     void updateButtons();
     void showAuthenticatedWorkspace();
     void showSignedOutWorkspace();
+    void updateGreeting();
     void applyPrivateInquiryFilter();
     void applyPrivateInquiryStatus(QListWidgetItem *item);
 
@@ -100,6 +104,8 @@ private:
     quint64 pendingListRevision = 0;
     QString idToken;
     QString refreshToken;
+    QString titleFontFamily;
+    bool localTestMode = false;
     QString loadedCode;
     QString publicSelectedCode;
     QString privateSelectedCode;

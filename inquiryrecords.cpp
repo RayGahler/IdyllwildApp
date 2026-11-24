@@ -70,24 +70,22 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         }
 
         auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
+        const QString previousSelection = list->currentItem()
+            ? list->currentItem()->data(Qt::UserRole + 1).toString()
+            : QString();
+        QSignalBlocker listSignals(list);
         list->clear();
         if (isPublic)
             publicStatusByCode.clear();
-        if (isPublic) {
-            publicSelectedCode.clear();
-            ui->saveButton->setEnabled(false);
-            ui->publicSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
-        } else {
-            privateSelectedCode.clear();
-            ui->savePrivateButton->setEnabled(false);
-            ui->privateSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
-        }
+        QListWidgetItem *restoredSelection = nullptr;
         for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
             const QString documentId = document.value("name").toString().section('/', -1);
             const auto fields = document.value("fields").toObject();
             const QString code = readStringField(fields, "inquiryCode");
             const QString displayCode = code.isEmpty() ? documentId : code;
             auto *item = new QListWidgetItem(displayCode, list);
+            if (!previousSelection.isEmpty() && displayCode == previousSelection)
+                restoredSelection = item;
             item->setData(Qt::UserRole, documentId);
             item->setData(Qt::UserRole + 1, displayCode);
             if (isPublic) {
@@ -101,6 +99,27 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         if (isPublic) {
             for (int row = 0; row < ui->privateInquiryList->count(); ++row)
                 applyPrivateInquiryStatus(ui->privateInquiryList->item(row));
+        }
+        list->setCurrentItem(restoredSelection);
+        if (isPublic) {
+            publicSelectedCode = restoredSelection ? previousSelection : QString();
+            ui->publicSelectedCodeLabel->setText(restoredSelection ? previousSelection
+                                                                  : QStringLiteral("Select an inquiry"));
+            ui->saveButton->setEnabled(restoredSelection && !savingPublic);
+        } else {
+            privateSelectedCode = restoredSelection ? previousSelection : QString();
+            ui->privateSelectedCodeLabel->setText(restoredSelection ? previousSelection
+                                                                    : QStringLiteral("Select an inquiry"));
+            ui->savePrivateButton->setEnabled(restoredSelection && !savingPrivate);
+        }
+        if (!restoredSelection) {
+            auto *tab = isPublic ? ui->publicTab : ui->privateTab;
+            for (auto *edit : tab->findChildren<QLineEdit *>())
+                edit->clear();
+            for (auto *edit : tab->findChildren<QPlainTextEdit *>())
+                edit->clear();
+            if (!isPublic)
+                setPreferredContact(*ui->preferredContactEdit);
         }
         applyPrivateInquiryFilter();
         refreshButton->setEnabled(true);
@@ -147,7 +166,7 @@ void MainIdyll::applyPrivateInquiryFilter()
     for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
         auto *item = ui->privateInquiryList->item(row);
         const QString category = item->data(Qt::UserRole + 2).toString();
-        const bool visible = filter == tr("All Inquries") || filter == category;
+        const bool visible = filter == tr("All Inquiries") || filter == category;
         item->setHidden(!visible);
     }
 }

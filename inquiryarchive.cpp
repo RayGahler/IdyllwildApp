@@ -8,6 +8,8 @@
 #include <QJsonDocument>
 #include <QLocale>
 #include <QMessageBox>
+#include <QSignalBlocker>
+#include <QTextBrowser>
 #include <QNetworkRequest>
 #include <QUrlQuery>
 #include <QUuid>
@@ -33,20 +35,26 @@ QString documentsPath()
 }
 }
 
-void MainIdyll::refreshDeletedInquiries()
+void MainIdyll::refreshDeletedInquiries(bool preserveSelection)
 {
     if (idToken.isEmpty() || !ui->refreshDeletedButton->isEnabled())
         return;
 
     ui->refreshDeletedButton->setEnabled(false);
-    ui->deletedInquiryList->clear();
+    if (!preserveSelection) {
+        ui->deletedInquiryList->clear();
+        ui->deletedInquiryDetails->clear();
+    }
     updatePermanentDeleteButton();
-    ui->deletedInquiryDetails->clear();
     ui->deletedListStatus->setText(tr("Loading deleted inquiries…"));
-    loadDeletedPage({});
+    const QString selectedArchiveId = preserveSelection && ui->deletedInquiryList->currentItem()
+        ? ui->deletedInquiryList->currentItem()->data(archiveIdRole).toString()
+        : QString();
+    loadDeletedPage({}, preserveSelection, selectedArchiveId);
 }
 
-void MainIdyll::loadDeletedPage(const QString &pageToken)
+void MainIdyll::loadDeletedPage(const QString &pageToken, bool preserveSelection,
+                                const QString &selectedArchiveId)
 {
     QUrl url = inquiryCollectionUrl(deletedCollection);
     QUrlQuery query;
@@ -59,7 +67,8 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
     QNetworkRequest request(url);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, session] {
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, session, pageToken, preserveSelection, selectedArchiveId] {
         reply->deleteLater();
         if (session != sessionGeneration)
             return;
@@ -79,6 +88,13 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
             return;
         }
 
+        const QString activeSelectionId = preserveSelection && pageToken.isEmpty()
+            && ui->deletedInquiryList->currentItem()
+            ? ui->deletedInquiryList->currentItem()->data(archiveIdRole).toString()
+            : selectedArchiveId;
+        QSignalBlocker selectionBlocker(ui->deletedInquiryList);
+        if (pageToken.isEmpty())
+            ui->deletedInquiryList->clear();
         for (const auto &entry : response.value("documents").toArray()) {
             const auto document = entry.toObject();
             const auto fields = document.value("fields").toObject();
@@ -99,8 +115,22 @@ void MainIdyll::loadDeletedPage(const QString &pageToken)
 
         const QString nextPage = response.value("nextPageToken").toString();
         if (!nextPage.isEmpty()) {
-            loadDeletedPage(nextPage);
+            loadDeletedPage(nextPage, preserveSelection, activeSelectionId);
             return;
+        }
+
+        if (preserveSelection) {
+            QListWidgetItem *selectedItem = nullptr;
+            for (int row = 0; row < ui->deletedInquiryList->count(); ++row) {
+                auto *item = ui->deletedInquiryList->item(row);
+                if (item->data(archiveIdRole).toString() == activeSelectionId) {
+                    selectedItem = item;
+                    break;
+                }
+            }
+            ui->deletedInquiryList->setCurrentItem(selectedItem);
+            if (!selectedItem)
+                ui->deletedInquiryDetails->clear();
         }
 
         ui->refreshDeletedButton->setEnabled(true);
@@ -119,33 +149,76 @@ void MainIdyll::showDeletedInquiry(QListWidgetItem *item)
         return;
 
     const auto fields = item->data(Qt::UserRole).toJsonObject();
-    QStringList sections{item->text()};
-    const auto appendRecord = [&sections](const QString &title, const QJsonObject &record) {
+    QStringList html{
+        QStringLiteral("<html><head><style>"
+                       "body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#e8efe9;background:#101c15;margin:12px;}"
+                       "h1{font-size:21px;margin:0 0 5px;color:#fff;}"
+                       "h2{font-size:14px;margin:18px 0 7px;color:#f0b17e;text-transform:uppercase;letter-spacing:1px;}"
+                       ".meta{color:#b8c6bb;font-size:12px;margin:0 0 12px;}"
+                       "table{width:100%;border-collapse:collapse;}"
+                       "td{padding:6px 8px;border-bottom:1px solid #2d4033;vertical-align:top;}"
+                       "td:first-child{width:30%;color:#aab9ad;font-weight:600;}"
+                       "td:last-child{color:#f2f5f2;white-space:pre-wrap;}"
+                       ".empty{color:#91a094;font-style:italic;}"
+                       "</style></head><body>")
+    };
+    const QString inquiryCode = readStringField(fields, "inquiryCode");
+    const QString deletedAtRaw = fields.value("deletedAt").toObject()
+                                     .value("timestampValue").toString();
+    const QDateTime deletedAt = QDateTime::fromString(deletedAtRaw, Qt::ISODate);
+    html.append(QStringLiteral("<h1>%1</h1>").arg(
+        (inquiryCode.isEmpty() ? item->text() : inquiryCode).toHtmlEscaped()));
+    if (deletedAt.isValid()) {
+        html.append(QStringLiteral("<p class='meta'>Deleted %1</p>").arg(
+            QLocale().toString(deletedAt.toLocalTime(), QLocale::LongFormat).toHtmlEscaped()));
+    }
+
+    const auto appendRecord = [&html](const QString &title, const QJsonObject &record) {
         if (record.isEmpty())
             return;
-        QStringList lines{title};
         const auto values = record.value("mapValue").toObject().value("fields").toObject();
+        QStringList keys{"name", "phone", "email", "device", "model", "status",
+                         "problem", "publicMessage", "preferredContact", "address",
+                         "receivedAt", "createdAt"};
         for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
-            const auto encoded = it.value().toObject();
+            if (!keys.contains(it.key()))
+                keys.append(it.key());
+        }
+        html.append(QStringLiteral("<h2>%1</h2><table>").arg(title.toHtmlEscaped()));
+        bool hasRows = false;
+        for (const QString &key : keys) {
+            if (!values.contains(key))
+                continue;
+            const auto encoded = values.value(key).toObject();
             const auto value = encoded.constBegin();
             if (value == encoded.constEnd())
                 continue;
-
-            QString text;
-            if (value->isString())
-                text = value->toString();
-            else if (value->isObject())
-                text = QString::fromUtf8(QJsonDocument(value->toObject()).toJson(QJsonDocument::Compact));
-            else
-                text = value->toVariant().toString();
-            lines.append(it.key() + ": " + text);
+            QString text = value->isString() ? value->toString()
+                : value->isObject()
+                    ? QString::fromUtf8(QJsonDocument(value->toObject()).toJson(QJsonDocument::Indented))
+                    : value->toVariant().toString();
+            if (text.trimmed().isEmpty())
+                continue;
+            QString label;
+            for (QChar character : key) {
+                if (character.isUpper() && !label.isEmpty())
+                    label.append(QLatin1Char(' '));
+                label.append(character);
+            }
+            label[0] = label.at(0).toUpper();
+            html.append(QStringLiteral("<tr><td>%1</td><td>%2</td></tr>")
+                .arg(label.toHtmlEscaped(), text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"))));
+            hasRows = true;
         }
-        sections.append(lines.join('\n'));
+        if (!hasRows)
+            html.append(QStringLiteral("<tr><td colspan='2' class='empty'>No saved fields</td></tr>"));
+        html.append(QStringLiteral("</table>"));
     };
     appendRecord(tr("Pending record"), fields.value("pendingRecord").toObject());
     appendRecord(tr("Public record"), fields.value("publicRecord").toObject());
     appendRecord(tr("Private record"), fields.value("privateRecord").toObject());
-    ui->deletedInquiryDetails->setPlainText(sections.join("\n\n"));
+    html.append(QStringLiteral("</body></html>"));
+    ui->deletedInquiryDetails->setHtml(html.join(QString()));
 }
 
 void MainIdyll::updatePermanentDeleteButton()
