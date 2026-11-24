@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "preferredcontact.h"
 
 #include <ui_mainidyll.h>
 
@@ -18,6 +19,8 @@ MainIdyll::MainIdyll(QWidget *parent)
     , ui(new Ui::MainIdyll)
 {
     ui->setupUi(this);
+    setPreferredContact(*ui->pendingPreferredEdit);
+    setPreferredContact(*ui->preferredContactEdit);
     ui->inquiryTabs->setEnabled(false);
     ui->signOutButton->setEnabled(false);
     ui->saveButton->setEnabled(false);

@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "preferredcontact.h"
 #include "firestore.h"
 
 #include <ui_mainidyll.h>
@@ -55,7 +56,8 @@ void MainIdyll::openCreateInquiry()
     auto *privateDevice = new QLineEdit(privateGroup);
     auto *privateModel = new QLineEdit(privateGroup);
     auto *problem = new QPlainTextEdit(privateGroup);
-    auto *preferredContact = new QLineEdit(privateGroup);
+    auto *preferredContact = new QComboBox(privateGroup);
+    setPreferredContact(*preferredContact);
     privateForm->addRow(QStringLiteral("Name"), name);
     privateForm->addRow(QStringLiteral("Phone"), phone);
     privateForm->addRow(QStringLiteral("Email"), email);
@@ -90,7 +92,7 @@ void MainIdyll::openCreateInquiry()
             {"device", privateDevice->text().trimmed().isEmpty() ? device->text().trimmed() : privateDevice->text().trimmed()},
             {"model", privateModel->text().trimmed().isEmpty() ? model->text().trimmed() : privateModel->text().trimmed()},
             {"problem", problem->toPlainText().trimmed()},
-            {"preferredContact", preferredContact->text().trimmed()}
+            {"preferredContact", preferredContact->currentText()}
         });
         dialog.accept();
     });

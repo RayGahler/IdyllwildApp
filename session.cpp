@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "preferredcontact.h"
 #include "firestore.h"
 
 #include <ui_mainidyll.h>
@@ -118,7 +119,7 @@ void MainIdyll::signOut()
     ui->pendingDeviceEdit->clear();
     ui->pendingModelEdit->clear();
     ui->pendingProblemEdit->clear();
-    ui->pendingPreferredEdit->clear();
+    setPreferredContact(*ui->pendingPreferredEdit);
     ui->pendingAddressEdit->clear();
     ui->pendingStatusEdit->setText(QStringLiteral("Received"));
     ui->pendingMessageEdit->clear();
@@ -132,7 +133,7 @@ void MainIdyll::signOut()
     ui->privateDeviceEdit->clear();
     ui->privateModelEdit->clear();
     ui->problemEdit->clear();
-    ui->preferredContactEdit->clear();
+    setPreferredContact(*ui->preferredContactEdit);
     ui->addressEdit->clear();
     ui->codeEdit->clear();
     ui->emailEdit->clear();

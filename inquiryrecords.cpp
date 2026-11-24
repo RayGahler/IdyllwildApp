@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "preferredcontact.h"
 #include "firestore.h"
 
 #include <ui_mainidyll.h>
@@ -113,7 +114,7 @@ void MainIdyll::loadCollectionRecord(const QString &collection, const QString &c
             ui->privateDeviceEdit->setText(readStringField(fields, "device"));
             ui->privateModelEdit->setText(readStringField(fields, "model"));
             ui->problemEdit->setPlainText(readStringField(fields, "problem"));
-            ui->preferredContactEdit->setText(readStringField(fields, "preferredContact"));
+            setPreferredContact(*ui->preferredContactEdit, readStringField(fields, "preferredContact"));
             ui->addressEdit->setPlainText(readStringField(fields, "address"));
             if (!savingPrivate)
                 ui->savePrivateButton->setEnabled(true);
@@ -190,7 +191,7 @@ void MainIdyll::loadPrivateRecord()
             ui->privateDeviceEdit->setText(readStringField(fields, "device"));
             ui->privateModelEdit->setText(readStringField(fields, "model"));
             ui->problemEdit->setPlainText(readStringField(fields, "problem"));
-            ui->preferredContactEdit->setText(readStringField(fields, "preferredContact"));
+            setPreferredContact(*ui->preferredContactEdit, readStringField(fields, "preferredContact"));
             ui->addressEdit->setPlainText(readStringField(fields, "address"));
             privateExists = true;
         }
@@ -219,7 +220,7 @@ QJsonObject MainIdyll::privateFields() const
         {"device", ui->privateDeviceEdit->text().trimmed()},
         {"model", ui->privateModelEdit->text().trimmed()},
         {"problem", ui->problemEdit->toPlainText()},
-        {"preferredContact", ui->preferredContactEdit->text()},
+        {"preferredContact", ui->preferredContactEdit->currentText()},
         {"address", ui->addressEdit->toPlainText()}
     };
 }

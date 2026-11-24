@@ -24,6 +24,8 @@ set(PROJECT_SOURCES
         inquiryarchive.cpp
         firestore.cpp
         firestore.h
+        preferredcontact.cpp
+        preferredcontact.h
         sounds.qrc
 )
 

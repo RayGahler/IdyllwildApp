@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "preferredcontact.h"
 #include "firestore.h"
 
 #include <ui_mainidyll.h>
@@ -197,7 +198,7 @@ void MainIdyll::loadPendingInquiry(const QString &displayCode)
         ui->pendingDeviceEdit->setText(readStringField(selectedPendingData, "device"));
         ui->pendingModelEdit->setText(readStringField(selectedPendingData, "model"));
         ui->pendingProblemEdit->setPlainText(readStringField(selectedPendingData, "problem"));
-        ui->pendingPreferredEdit->setText(readStringField(selectedPendingData, "preferredContact"));
+        setPreferredContact(*ui->pendingPreferredEdit, readStringField(selectedPendingData, "preferredContact"));
         setPendingFieldsEnabled(true);
         ui->promotePendingButton->setEnabled(true);
         reply->deleteLater();
@@ -242,7 +243,7 @@ void MainIdyll::promotePendingInquiry()
         {"device", device},
         {"model", model},
         {"problem", problem},
-        {"preferredContact", ui->pendingPreferredEdit->text().trimmed()},
+        {"preferredContact", ui->pendingPreferredEdit->currentText()},
         {"address", ui->pendingAddressEdit->toPlainText().trimmed()}
     };
 

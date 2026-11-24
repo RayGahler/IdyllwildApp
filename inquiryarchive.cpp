@@ -1,5 +1,6 @@
 #include "mainidyll.h"
 #include "firestore.h"
+#include "preferredcontact.h"
 
 #include <ui_mainidyll.h>
 
@@ -317,6 +318,8 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
                                 edit->clear();
                             for (auto *edit : tab->findChildren<QPlainTextEdit *>())
                                 edit->clear();
+                            if (!isPublic)
+                                setPreferredContact(*ui->preferredContactEdit);
                         }
                         for (int row = list->count() - 1; row >= 0; --row) {
                             if (list->item(row)->data(Qt::UserRole).toString() == code)

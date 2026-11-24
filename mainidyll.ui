@@ -68,7 +68,7 @@
              <item row="5" column="0"><widget class="QLabel" name="pendingProblemLabel"><property name="text"><string>Problem</string></property></widget></item>
              <item row="5" column="1"><widget class="QPlainTextEdit" name="pendingProblemEdit"/></item>
              <item row="6" column="0"><widget class="QLabel" name="pendingPreferredLabel"><property name="text"><string>Preferred contact</string></property></widget></item>
-             <item row="6" column="1"><widget class="QLineEdit" name="pendingPreferredEdit"/></item>
+             <item row="6" column="1"><widget class="QComboBox" name="pendingPreferredEdit"/></item>
              <item row="7" column="0"><widget class="QLabel" name="pendingAddressLabel"><property name="text"><string>Address</string></property></widget></item>
              <item row="7" column="1"><widget class="QPlainTextEdit" name="pendingAddressEdit"/></item>
              <item row="8" column="0"><widget class="QLabel" name="pendingStatusLabel"><property name="text"><string>Public status</string></property></widget></item>
@@ -151,7 +151,7 @@
             <item row="5" column="0"><widget class="QLabel" name="problemLabel"><property name="text"><string>Problem</string></property></widget></item>
             <item row="5" column="1"><widget class="QPlainTextEdit" name="problemEdit"/></item>
             <item row="6" column="0"><widget class="QLabel" name="preferredContactLabel"><property name="text"><string>Preferred contact</string></property></widget></item>
-            <item row="6" column="1"><widget class="QLineEdit" name="preferredContactEdit"/></item>
+            <item row="6" column="1"><widget class="QComboBox" name="preferredContactEdit"/></item>
             <item row="7" column="0"><widget class="QLabel" name="addressLabel"><property name="text"><string>Address</string></property></widget></item>
             <item row="7" column="1"><widget class="QPlainTextEdit" name="addressEdit"/></item>
            </layout>
