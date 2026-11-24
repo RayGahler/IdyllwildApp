@@ -77,6 +77,9 @@ set_target_properties(IdyllwildApp PROPERTIES
 )
 
 if(APPLE)
+    set_target_properties(IdyllwildApp PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.idyllwild.IdyllwildApp
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.default.in")
     set_source_files_properties(branding/IdyllwildApp.icns PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources)
     target_sources(IdyllwildApp PRIVATE branding/IdyllwildApp.icns)
@@ -121,7 +124,6 @@ if(IDYLLWILD_UPDATE_PUBLIC_KEY)
         OBJCXX_STANDARD 17
         OBJCXX_STANDARD_REQUIRED TRUE
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
-        MACOSX_BUNDLE_GUI_IDENTIFIER com.idyllwild.IdyllwildApp
         MACOSX_BUNDLE_BUNDLE_VERSION "${IDYLLWILD_UPDATE_BUILD}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.0"
         BUILD_RPATH "@executable_path/../Frameworks")
