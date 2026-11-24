@@ -33,6 +33,8 @@ private:
     void renewPendingSession(bool background);
 
     void openCreateInquiry();
+    void openRepairExport(bool schedule);
+    void showRepairExport(bool schedule, const QString &inquiryCode, const QJsonObject &fields);
     void postNewInquiry(const QString &code, const QJsonObject &publicData,
                         const QJsonObject &privateData);
 

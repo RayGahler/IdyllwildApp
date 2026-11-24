@@ -71,6 +71,8 @@ MainIdyll::MainIdyll(QWidget *parent)
             loadCollectionRecord("privateInquiries", code);
     });
     connect(ui->createInquiryButton, &QPushButton::clicked, this, &MainIdyll::openCreateInquiry);
+    connect(ui->createContactButton, &QPushButton::clicked, this, [this] { openRepairExport(false); });
+    connect(ui->scheduleRepairButton, &QPushButton::clicked, this, [this] { openRepairExport(true); });
     connect(ui->refreshPendingButton, &QPushButton::clicked, this, [this] {
         refreshPendingInquiries();
     });

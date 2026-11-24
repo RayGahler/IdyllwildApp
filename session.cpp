@@ -68,6 +68,8 @@ void MainIdyll::signIn()
         ui->statusbar->showMessage(QStringLiteral("Signed in. Enter an inquiry code to load records."));
         ui->loadButton->setEnabled(true);
         ui->createInquiryButton->setEnabled(true);
+        ui->createContactButton->setEnabled(true);
+        ui->scheduleRepairButton->setEnabled(true);
         pendingTimer.start();
         refreshPendingInquiries();
         if (ui->inquiryTabs->currentWidget() == ui->deletedTab)
@@ -147,6 +149,8 @@ void MainIdyll::signOut()
     ui->signInButton->setEnabled(true);
     ui->signOutButton->setEnabled(false);
     ui->createInquiryButton->setEnabled(false);
+    ui->createContactButton->setEnabled(false);
+    ui->scheduleRepairButton->setEnabled(false);
     ui->promotePendingButton->setEnabled(false);
     ui->saveButton->setEnabled(false);
     ui->savePrivateButton->setEnabled(false);

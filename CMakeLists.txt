@@ -19,6 +19,8 @@ set(PROJECT_SOURCES
         mainidyll.ui
         session.cpp
         createinquiry.cpp
+        repairexport.cpp
+        IdyllwildSync.h
         pendinginquiries.cpp
         inquiryrecords.cpp
         inquiryarchive.cpp

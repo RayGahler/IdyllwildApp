@@ -30,10 +30,24 @@
       </widget></item>
      </layout>
     </item>
-    <item alignment="Qt::AlignRight">
-     <widget class="QPushButton" name="createInquiryButton">
-      <property name="text"><string>Create inquiry</string></property>
-     </widget>
+    <item>
+     <layout class="QHBoxLayout" name="inquiryActions">
+      <item><spacer name="inquiryActionsSpacer">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
+      </spacer></item>
+      <item><widget class="QPushButton" name="createInquiryButton">
+       <property name="text"><string>Create inquiry</string></property>
+      </widget></item>
+      <item><widget class="QPushButton" name="createContactButton">
+       <property name="enabled"><bool>false</bool></property>
+       <property name="text"><string>Create contact</string></property>
+      </widget></item>
+      <item><widget class="QPushButton" name="scheduleRepairButton">
+       <property name="enabled"><bool>false</bool></property>
+       <property name="text"><string>Schedule repair</string></property>
+      </widget></item>
+     </layout>
     </item>
     <item>
      <widget class="QTabWidget" name="inquiryTabs">
