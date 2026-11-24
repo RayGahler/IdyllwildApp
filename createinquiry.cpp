@@ -105,11 +105,12 @@ void MainIdyll::openCreateInquiry()
 void MainIdyll::postNewInquiry(const QString &code, const QJsonObject &publicData,
                                const QJsonObject &privateData)
 {
+    const auto session = sessionGeneration;
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
     if (!publicExists && publicData.contains("inquiryCode")) {
         // Preserve the current helper's create semantics for new inquiry documents.
     }
-    auto postRecord = [this, &code, &now](const QString &collection, QJsonObject data,
+    auto postRecord = [this, &code, &now, session](const QString &collection, QJsonObject data,
                                           const QString &label) {
         data.insert("inquiryCode", code);
         QJsonObject fields = firestoreFields(data);
@@ -124,7 +125,11 @@ void MainIdyll::postNewInquiry(const QString &code, const QJsonObject &publicDat
         request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         auto *reply = network.sendCustomRequest(
             request, "POST", QJsonDocument(QJsonObject{{"fields", fields}}).toJson());
-        connect(reply, &QNetworkReply::finished, this, [this, reply, label, code] {
+        connect(reply, &QNetworkReply::finished, this, [this, reply, label, code, session] {
+            if (session != sessionGeneration) {
+                reply->deleteLater();
+                return;
+            }
             const auto response = QJsonDocument::fromJson(reply->readAll()).object();
             if (reply->error() != QNetworkReply::NoError) {
                 showError(QStringLiteral("%1 record failed: %2").arg(

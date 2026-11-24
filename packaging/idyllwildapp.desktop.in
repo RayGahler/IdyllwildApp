@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Idyllwild Inquiry Admin
+Comment=Idyllwild Electronic Repair inquiry administration
+Exec=IdyllwildApp
+Icon=idyllwildapp
+Terminal=false
+Categories=Office;Utility;

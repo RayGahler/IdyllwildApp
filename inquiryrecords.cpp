@@ -115,25 +115,30 @@ void MainIdyll::applyPrivateInquiryStatus(QListWidgetItem *item)
     const QString code = item->data(Qt::UserRole + 1).toString();
     const QString status = publicStatusByCode.value(code).trimmed();
     const QString normalized = status.toLower();
-    item->setText(code);
-    item->setToolTip(status.isEmpty() ? tr("Public status unavailable") : tr("Public status: %1").arg(status));
-    item->setBackground(QBrush());
-    item->setForeground(QBrush());
+    QString category = tr("Pending Review/In-Repair");
+    QString bubbleLabel = tr("In-Progress");
+    QColor foreground(QStringLiteral("#755600"));
+    QColor background(QStringLiteral("#fff1b8"));
     if (normalized == QStringLiteral("done!")) {
-        item->setForeground(QColor(QStringLiteral("#2e7d32")));
-        item->setBackground(QColor(QStringLiteral("#dff2df")));
-        item->setToolTip(tr("Completed — public status: %1").arg(status));
-    } else if (normalized == QStringLiteral("in repair") || normalized == QStringLiteral("recieved")
-               || normalized == QStringLiteral("received")) {
-        item->setText(code + tr(" — in-progress"));
-        item->setForeground(QColor(QStringLiteral("#CC7E3E")));
-        item->setBackground(QColor(QStringLiteral("#fff0df")));
-        item->setToolTip(tr("In-progress — public status: %1").arg(status));
+        category = tr("Completed");
+        bubbleLabel = tr("Completed");
+        foreground = QColor(QStringLiteral("#47311F"));
+        background = QColor(QStringLiteral("#E3C9A8"));
     } else if (normalized == QStringLiteral("canceled") || normalized == QStringLiteral("on hold")) {
-        item->setForeground(QColor(QStringLiteral("#c62828")));
-        item->setBackground(QColor(QStringLiteral("#fde2e2")));
-        item->setToolTip(tr("Canceled or on hold — public status: %1").arg(status));
+        category = tr("Canceled");
+        bubbleLabel = tr("Canceled");
+        foreground = QColor(QStringLiteral("#9f2020"));
+        background = QColor(QStringLiteral("#f8d9d9"));
     }
+    item->setData(Qt::UserRole + 2, category);
+    item->setText(code + QLatin1Char('\n') + bubbleLabel);
+    item->setTextAlignment(Qt::AlignCenter);
+    item->setSizeHint(QSize(164, 52));
+    item->setForeground(foreground);
+    item->setBackground(background);
+    item->setToolTip(status.isEmpty()
+                         ? tr("Public status unavailable; routed to pending review")
+                         : tr("Public status: %1").arg(status));
 }
 
 void MainIdyll::applyPrivateInquiryFilter()
@@ -141,13 +146,8 @@ void MainIdyll::applyPrivateInquiryFilter()
     const QString filter = ui->privateInquiryFilter->currentText();
     for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
         auto *item = ui->privateInquiryList->item(row);
-        const QString status = publicStatusByCode.value(item->data(Qt::UserRole + 1).toString()).trimmed().toLower();
-        const bool completed = status == QStringLiteral("done!");
-        const bool canceled = status == QStringLiteral("canceled") || status == QStringLiteral("on hold");
-        const bool visible = filter == tr("All inquiries")
-            || (filter == tr("Completed") && completed)
-            || (filter == tr("Canceled") && canceled)
-            || (filter == tr("New Inquiry") && !completed && !canceled);
+        const QString category = item->data(Qt::UserRole + 2).toString();
+        const bool visible = filter == tr("All Inquries") || filter == category;
         item->setHidden(!visible);
     }
 }
@@ -155,10 +155,15 @@ void MainIdyll::applyPrivateInquiryFilter()
 void MainIdyll::loadCollectionRecord(const QString &collection, const QString &code)
 {
     const bool isPublic = collection == "publicInquiries";
+    const auto session = sessionGeneration;
     QNetworkRequest request(inquiryUrl(collection, code));
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, session] {
+        if (session != sessionGeneration) {
+            reply->deleteLater();
+            return;
+        }
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             showError(response.value("error").toObject().value("message").toString(reply->errorString()));
@@ -221,10 +226,16 @@ void MainIdyll::loadInquiry()
 
 void MainIdyll::loadPublicRecord()
 {
-    QNetworkRequest request(inquiryUrl("publicInquiries", loadedCode));
+    const auto session = sessionGeneration;
+    const QString code = loadedCode;
+    QNetworkRequest request(inquiryUrl("publicInquiries", code));
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code] {
+        if (session != sessionGeneration || code != loadedCode) {
+            reply->deleteLater();
+            return;
+        }
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (isNotFound(reply, response)) {
             publicExists = false;
@@ -254,10 +265,16 @@ void MainIdyll::loadPublicRecord()
 
 void MainIdyll::loadPrivateRecord()
 {
-    QNetworkRequest request(inquiryUrl("privateInquiries", loadedCode));
+    const auto session = sessionGeneration;
+    const QString code = loadedCode;
+    QNetworkRequest request(inquiryUrl("privateInquiries", code));
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code] {
+        if (session != sessionGeneration || code != loadedCode) {
+            reply->deleteLater();
+            return;
+        }
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (isNotFound(reply, response)) {
             privateExists = false;
@@ -374,9 +391,14 @@ void MainIdyll::saveSingleRecord(const QString &collection, const QJsonObject &f
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     auto *reply = network.sendCustomRequest(
         request, "PATCH", QJsonDocument(QJsonObject{{"fields", encoded}}).toJson());
+    const auto session = sessionGeneration;
     const bool updatesStatus = isPublic && fields.contains(QStringLiteral("status"));
     const QString savedStatus = fields.value(QStringLiteral("status")).toString();
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, updatesStatus, savedStatus] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, updatesStatus, savedStatus, session] {
+        if (session != sessionGeneration) {
+            reply->deleteLater();
+            return;
+        }
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             showError(response.value("error").toObject().value("message").toString(reply->errorString()));
@@ -406,7 +428,9 @@ void MainIdyll::saveSingleRecord(const QString &collection, const QJsonObject &f
 
 void MainIdyll::saveRecord(const QString &collection, const QJsonObject &fields)
 {
-    QUrl url = inquiryUrl(collection, loadedCode);
+    const auto session = sessionGeneration;
+    const QString code = loadedCode;
+    QUrl url = inquiryUrl(collection, code);
     QUrlQuery query;
     for (auto it = fields.begin(); it != fields.end(); ++it)
         query.addQueryItem("updateMask.fieldPaths", it.key());
@@ -430,7 +454,11 @@ void MainIdyll::saveRecord(const QString &collection, const QJsonObject &fields)
     auto *reply = network.sendCustomRequest(
         request, "PATCH", QJsonDocument(QJsonObject{{"fields", encoded}}).toJson());
     const bool isPublic = collection == "publicInquiries";
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, session, code] {
+        if (session != sessionGeneration || code != loadedCode) {
+            reply->deleteLater();
+            return;
+        }
         const auto response = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             showError(response.value("error").toObject().value("message").toString(

@@ -6,7 +6,9 @@
 
 #include <QDateTime>
 #include <QJsonDocument>
+#include <QMenuBar>
 #include <QNetworkRequest>
+#include <QTime>
 #include <QUrlQuery>
 
 using Firestore::firestoreError;
@@ -78,19 +80,22 @@ void MainIdyll::signIn()
             refreshDeletedInquiries();
         refreshCollection("publicInquiries");
         refreshCollection("privateInquiries");
+        const QString emailName = ui->emailEdit->text().trimmed().section(QLatin1Char('@'), 0, 0).trimmed();
+        const QString greetingName = emailName.isEmpty() ? tr("there") : emailName;
+        const int hour = QTime::currentTime().hour();
+        const QString timeGreeting = hour >= 5 && hour < 12 ? tr("Good morning")
+                                     : hour < 17 ? tr("Good afternoon")
+                                     : hour < 21 ? tr("Good evening")
+                                                  : tr("Good night");
+        ui->statusbar->showMessage(QStringLiteral("%1 %2!").arg(timeGreeting, greetingName), 10000);
         reply->deleteLater();
     });
 }
 
 void MainIdyll::signOut()
 {
-    ui->workspaceWidget->hide();
     menuBar()->hide();
     ui->signInGroup->setTitle(QStringLiteral("Admin sign in"));
-    ui->emailEdit->show();
-    ui->passwordEdit->show();
-    ui->signInButton->show();
-    ui->signOutButton->hide();
     ++sessionGeneration;
     pendingTimer.stop();
     pendingSound.stop();
@@ -165,6 +170,7 @@ void MainIdyll::signOut()
     ui->savePrivateButton->setEnabled(false);
     setPendingFieldsEnabled(false);
     ui->statusbar->showMessage(QStringLiteral("Signed out."));
+    showSignedOutWorkspace();
 }
 
 void MainIdyll::renewPendingSession(bool background)

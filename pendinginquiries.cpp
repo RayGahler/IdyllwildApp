@@ -150,7 +150,7 @@ void MainIdyll::applyPendingList(const QJsonArray &documents)
 void MainIdyll::updatePendingHighlight()
 {
     ui->inquiryTabs->tabBar()->setStyleSheet(unreadPendingIds.isEmpty() ? QString() : QStringLiteral(
-        "QTabBar::tab:first { background-color: #167044; color: white; }"));
+        "QTabBar::tab:first { background-color: #CC7E3E; color: #142A1E; }"));
 }
 
 void MainIdyll::setPendingFieldsEnabled(bool enabled)

@@ -8,11 +8,13 @@
   <property name="windowTitle"><string>Idyllwild Inquiry Admin</string></property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="mainLayout">
-    <item>
-     <layout class="QVBoxLayout" name="brandLayout">
-      <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>150</width><height>150</height></size></property><property name="maximumSize"><size><width>150</width><height>150</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
-      <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN INQUIRY FORM PANEL</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">color: white; background-color: #1f4d3a; border: 2px solid white; border-radius: 5px; padding: 5px 12px;</string></property></widget></item>
-     </layout>
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QWidget" name="loginBrandContainer">
+      <layout class="QHBoxLayout" name="loginBrandLayout">
+       <item alignment="Qt::AlignVCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>220</width><height>220</height></size></property><property name="maximumSize"><size><width>220</width><height>220</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+       <item alignment="Qt::AlignVCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN REPAIR INQUIRY FORUM</string></property><property name="minimumSize"><size><width>340</width><height>210</height></size></property><property name="maximumSize"><size><width>340</width><height>210</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
+      </layout>
+     </widget>
     </item>
     <item alignment="Qt::AlignHCenter">
      <widget class="QGroupBox" name="signInGroup">
@@ -22,13 +24,31 @@
        <item><widget class="QLineEdit" name="emailEdit"><property name="placeholderText"><string>Admin email</string></property></widget></item>
        <item><widget class="QLineEdit" name="passwordEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Password</string></property></widget></item>
        <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
-       <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign out</string></property></widget></item>
       </layout>
      </widget>
     </item>
     <item>
-     <widget class="QWidget" name="workspaceWidget">
-      <layout class="QVBoxLayout" name="workspaceLayout">
+     <widget class="QScrollArea" name="workspaceWidget">
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <widget class="QWidget" name="workspaceContents">
+       <layout class="QVBoxLayout" name="workspaceLayout">
+        <item>
+         <widget class="QFrame" name="mainBrandContainer">
+          <property name="styleSheet"><string notr="true">QFrame#mainBrandContainer { background: transparent; border: none; }</string></property>
+          <property name="sizePolicy"><sizepolicy hsizetype="Maximum" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+          <property name="maximumSize"><size><width>340</width><height>78</height></size></property>
+          <layout class="QHBoxLayout" name="mainBrandLayout">
+           <property name="leftMargin"><number>10</number></property>
+           <property name="topMargin"><number>5</number></property>
+           <property name="rightMargin"><number>10</number></property>
+           <property name="bottomMargin"><number>5</number></property>
+           <item><widget class="QLabel" name="mainLogoLabel"><property name="minimumSize"><size><width>64</width><height>64</height></size></property><property name="maximumSize"><size><width>64</width><height>64</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
+           <item><widget class="QLabel" name="mainTitleLabel"><property name="text"><string>A.R.I.F</string></property><property name="minimumSize"><size><width>210</width><height>64</height></size></property><property name="maximumSize"><size><width>210</width><height>64</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
        <item>
      <layout class="QHBoxLayout" name="lookupLayout">
       <item><widget class="QLabel" name="codeLabel"><property name="text"><string>Inquiry code</string></property></widget></item>
@@ -160,7 +180,7 @@
         </item>
         <item>
          <layout class="QHBoxLayout" name="privateCollectionContent">
-          <item><widget class="QListWidget" name="privateInquiryList"/></item>
+          <item><widget class="QListWidget" name="privateInquiryList"><property name="viewMode"><enum>QListView::IconMode</enum></property><property name="flow"><enum>QListView::TopToBottom</enum></property><property name="wrapping"><bool>true</bool></property><property name="resizeMode"><enum>QListView::Adjust</enum></property><property name="movement"><enum>QListView::Static</enum></property><property name="gridSize"><size><width>176</width><height>62</height></size></property><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property><property name="wordWrap"><bool>true</bool></property></widget></item>
           <item>
            <layout class="QFormLayout" name="privateForm">
             <item row="0" column="0"><widget class="QLabel" name="nameLabel"><property name="text"><string>Name</string></property></widget></item>
@@ -213,12 +233,16 @@
       </widget>
      </widget>
        </item>
-      </layout>
+       </layout>
+      </widget>
      </widget>
     </item>
-    <item><widget class="QLabel" name="websiteLabel"><property name="text"><string>&lt;a href="https://www.idyllwildelectronics.com/"&gt;www.idyllwildelectronics.com&lt;/a&gt;</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="openExternalLinks"><bool>true</bool></property></widget></item>
+    <item><widget class="QLabel" name="websiteLabel"><property name="text"><string>&lt;a href="https://www.idyllwildelectronics.com/"&gt;&lt;span style="color:#A7D5A8"&gt;www.idyllwildelectronics.com&lt;/span&gt;&lt;/a&gt;</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="openExternalLinks"><bool>true</bool></property></widget></item>
     <item><widget class="QLabel" name="copyrightLabel"><property name="text"><string>2026-2027 Idyllwild Electronic Repair LLC &amp; Ray Gahler. All Rights Reserved</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
    </layout>
+   <widget class="QPushButton" name="signOutButton">
+    <property name="text"><string>Sign Out</string></property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>

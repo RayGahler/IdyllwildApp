@@ -1,6 +1,7 @@
 <RCC>
  <qresource prefix="/branding">
   <file alias="idyllwild-logo.png">branding/idyllwild-logo.png</file>
+  <file alias="app-icon.png">branding/app-icon.png</file>
   <file alias="PricedownBl.otf">branding/PricedownBl.otf</file>
  </qresource>
 </RCC>

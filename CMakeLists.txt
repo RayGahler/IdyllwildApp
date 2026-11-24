@@ -72,6 +72,20 @@ set_target_properties(IdyllwildApp PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
+if(APPLE)
+    set_source_files_properties(branding/IdyllwildApp.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(IdyllwildApp PRIVATE branding/IdyllwildApp.icns)
+    set_target_properties(IdyllwildApp PROPERTIES
+        MACOSX_BUNDLE_ICON_FILE IdyllwildApp.icns)
+endif()
+
+if(WIN32)
+    configure_file(packaging/windows_app.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/windows_app.rc" @ONLY)
+    target_sources(IdyllwildApp PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/windows_app.rc")
+endif()
+
 set(IDYLLWILD_SPARKLE_DIR "" CACHE PATH "Directory containing Sparkle.framework")
 set(IDYLLWILD_UPDATE_PUBLIC_KEY "" CACHE STRING "Sparkle EdDSA public key")
 set(IDYLLWILD_UPDATE_REPOSITORY "" CACHE STRING "GitHub repository hosting updates")
@@ -119,6 +133,16 @@ install(TARGETS IdyllwildApp
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+if(UNIX AND NOT APPLE)
+    configure_file(packaging/idyllwildapp.desktop.in
+        "${CMAKE_CURRENT_BINARY_DIR}/IdyllwildApp.desktop" COPYONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/IdyllwildApp.desktop"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES branding/idyllwildapp-512.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
+        RENAME idyllwildapp.png)
+endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(IdyllwildApp)

@@ -12,6 +12,7 @@
 #include <QSoundEffect>
 #include <QTimer>
 #include <QString>
+#include <QPixmap>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -82,6 +83,7 @@ private:
     void showError(const QString &message);
     void updateButtons();
     void showAuthenticatedWorkspace();
+    void showSignedOutWorkspace();
     void applyPrivateInquiryFilter();
     void applyPrivateInquiryStatus(QListWidgetItem *item);
 
@@ -102,6 +104,9 @@ private:
     QString publicSelectedCode;
     QString privateSelectedCode;
     QHash<QString, QString> publicStatusByCode;
+    QPixmap loginLogoPixmap;
+    QPixmap loginTitlePixmap;
+    QPixmap compactTitlePixmap;
     bool publicLoaded = false;
     bool privateLoaded = false;
     bool publicExists = false;
