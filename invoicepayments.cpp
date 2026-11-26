@@ -1,10 +1,12 @@
 #include "mainidyll.h"
 #include "repairstatus.h"
 #include "firestore.h"
+#include "invoice.h"
 #include "squarepayments.h"
 
 #include <ui_mainidyll.h>
 
+#include <QAction>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -34,6 +36,56 @@ QString cashAmount(qint64 cents)
 {
     return QLocale(QLocale::English, QLocale::UnitedStates).toCurrencyString(cents / 100.0);
 }
+
+bool verifiedSquareLocation(QNetworkReply *reply, const Square::Credentials &credentials)
+{
+    const auto location = QJsonDocument::fromJson(reply->readAll()).object().value("location").toObject();
+    return reply->error() == QNetworkReply::NoError && Square::isActiveCardLocation(location, credentials.locationId);
+}
+}
+
+void MainIdyll::setSquareConnection(SquareConnection connection)
+{
+    squareConnection = connection;
+    if (squareConnectionStatus) {
+        const QString status = connection == SquareConnection::Connected ? tr("Square API: Connected")
+            : connection == SquareConnection::Checking ? tr("Square API: Checking…")
+            : tr("Square API: Not connected");
+        squareConnectionStatus->setText(status);
+    }
+    updateInvoiceButtons();
+}
+
+void MainIdyll::refreshSquareConnection()
+{
+    if (idToken.isEmpty() || localTestMode || squareConnection == SquareConnection::Checking)
+        return;
+
+    squareConnectionCheckedAt = QDateTime::currentSecsSinceEpoch();
+    const auto credentials = Square::savedCredentials();
+    if (!credentials.isConfigured()) {
+        setSquareConnection(SquareConnection::Disconnected);
+        return;
+    }
+
+    setSquareConnection(SquareConnection::Checking);
+    const auto revision = ++squareConnectionRevision;
+    auto *reply = network.get(Square::request(credentials, QStringLiteral("locations/") + segment(credentials.locationId)));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, credentials, revision] {
+        reply->deleteLater();
+        if (revision != squareConnectionRevision)
+            return;
+
+        setSquareConnection(verifiedSquareLocation(reply, credentials)
+            ? SquareConnection::Connected : SquareConnection::Disconnected);
+    });
+}
+
+void MainIdyll::updatePublicInvoice(const QJsonObject &fields)
+{
+    publicInquiry.hasPayableInvoice = amountInCents(fields) > 0
+        && !Firestore::readStringField(fields, "invoicePaymentId").isEmpty();
+    publicInquiry.hasSquareLink = fields.value("invoiceCardReady").toObject().value("booleanValue").toBool();
 }
 
 void MainIdyll::configureSquarePayments()
@@ -74,15 +126,12 @@ void MainIdyll::configureSquarePayments()
         connect(&dialog, &QDialog::finished, reply, &QNetworkReply::abort);
         connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
         connect(reply, &QNetworkReply::finished, &dialog, [reply, credentials, &dialog, connectButton] {
-            const auto location = QJsonDocument::fromJson(reply->readAll()).object().value("location").toObject();
             if (reply->error() == QNetworkReply::OperationCanceledError)
                 return;
-            if (reply->error() != QNetworkReply::NoError || location.value("id").toString() != credentials.locationId
-                || location.value("status").toString() != QStringLiteral("ACTIVE")
-                || location.value("currency").toString() != QStringLiteral("USD")) {
+            if (!verifiedSquareLocation(reply, credentials)) {
                 connectButton->setEnabled(true);
                 QMessageBox::warning(&dialog, tr("Square connection failed"),
-                    tr("Square did not confirm an active USD location with this token."));
+                    tr("Square did not confirm an active USD location with card processing enabled."));
                 return;
             }
             if (!Square::saveCredentials(credentials)) {
@@ -93,8 +142,143 @@ void MainIdyll::configureSquarePayments()
             dialog.accept();
         });
     });
-    if (dialog.exec() == QDialog::Accepted)
+    if (dialog.exec() == QDialog::Accepted) {
+        ++squareConnectionRevision;
+        squareConnectionCheckedAt = QDateTime::currentSecsSinceEpoch();
+        setSquareConnection(SquareConnection::Connected);
         ui->statusbar->showMessage(tr("Square connected. The API token is stored in Keychain."));
+    }
+}
+
+void MainIdyll::generateSquarePaymentLink()
+{
+    if (!ui->generateSquareLinkButton->isEnabled())
+        return;
+
+    const auto credentials = Square::savedCredentials();
+    if (!credentials.isConfigured()) {
+        refreshSquareConnection();
+        return;
+    }
+
+    generatingSquareLink = true;
+    updateInvoiceButtons();
+    const QString code = publicInquiry.code;
+    const auto session = sessionGeneration;
+    ui->statusbar->showMessage(tr("Preparing Square checkout for %1…").arg(code));
+    auto *reply = network.get(Firestore::authorizedRequest(
+        Firestore::inquiryUrl(QStringLiteral("publicInquiries"), code), idToken));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, credentials, code, session] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
+            return;
+
+        const auto document = QJsonDocument::fromJson(reply->readAll()).object();
+        const auto fields = fieldsOf(document);
+        const QString paymentId = Firestore::readStringField(fields, "invoicePaymentId");
+        const QString invoiceNumber = Firestore::readStringField(fields, "invoiceNumber");
+        const QString updateTime = document.value("updateTime").toString();
+        const auto status = RepairStatus::normalized(Firestore::readStringField(fields, "status"));
+        const qint64 amountCents = amountInCents(fields);
+        if (reply->error() != QNetworkReply::NoError || paymentId.isEmpty() || invoiceNumber.isEmpty()
+            || updateTime.isEmpty() || amountCents <= 0 || status == RepairStatus::done
+            || status == RepairStatus::pendingPaymentReview || status == QStringLiteral("Canceled")) {
+            finishSquareLinkGeneration(tr("Publish a payable invoice for an active repair before generating a link."));
+            return;
+        }
+        if (fields.value("invoiceCardReady").toObject().value("booleanValue").toBool()) {
+            if (publicInquiry.code == code)
+                updatePublicInvoice(fields);
+            finishSquareLinkGeneration(tr("A Square link has already been published for %1.").arg(code));
+            return;
+        }
+
+        const auto publish = [this, code, updateTime, session](QJsonArray writes) {
+            writes.append(QJsonObject{
+                {"update", QJsonObject{
+                    {"name", Firestore::documentsPath() + QStringLiteral("/publicInquiries/") + code},
+                    {"fields", QJsonObject{{"invoiceCardReady", QJsonObject{{"booleanValue", true}}}}}
+                }},
+                {"updateMask", QJsonObject{{"fieldPaths", QJsonArray{QStringLiteral("invoiceCardReady")}}}},
+                {"currentDocument", QJsonObject{{"updateTime", updateTime}}}
+            });
+            auto *saveReply = Firestore::commitWrites(network, idToken, writes);
+            connect(saveReply, &QNetworkReply::finished, this, [this, saveReply, code, session] {
+                saveReply->deleteLater();
+                if (session != sessionGeneration)
+                    return;
+
+                if (saveReply->error() != QNetworkReply::NoError) {
+                    refreshCollection(QStringLiteral("publicInquiries"));
+                    finishSquareLinkGeneration(tr("The link could not be published. Reload the inquiry and check technician access."));
+                    return;
+                }
+                if (publicInquiry.code == code)
+                    publicInquiry.hasSquareLink = true;
+                finishSquareLinkGeneration(tr("Square link published for %1. Pay now appears when the repair is ready for pickup.").arg(code));
+                refreshCollection(QStringLiteral("publicInquiries"));
+            });
+        };
+
+        // A staff-only read also finds checkouts saved by earlier versions of the app.
+        auto *existingReply = network.get(Firestore::authorizedRequest(
+            Firestore::inquiryUrl(QStringLiteral("invoiceSquareCheckouts"), paymentId), idToken));
+        connect(existingReply, &QNetworkReply::finished, this,
+                [this, existingReply, credentials, code, session, invoiceNumber, paymentId, amountCents, publish] {
+            existingReply->deleteLater();
+            if (session != sessionGeneration)
+                return;
+
+            const auto existing = QJsonDocument::fromJson(existingReply->readAll()).object();
+            if (existingReply->error() == QNetworkReply::NoError) {
+                publish({});
+                return;
+            }
+            if (!Firestore::isNotFound(existingReply, existing)) {
+                finishSquareLinkGeneration(tr("Could not load checkout. Check Firestore technician access."));
+                return;
+            }
+
+            const auto request = Square::checkoutPayload(credentials, paymentId, invoiceNumber, amountCents,
+                                                        customerInvoiceUrl(code, invoiceNumber));
+            auto *checkoutReply = network.post(Square::request(credentials, QStringLiteral("online-checkout/payment-links")),
+                                              QJsonDocument(request).toJson(QJsonDocument::Compact));
+            connect(checkoutReply, &QNetworkReply::finished, this,
+                    [this, checkoutReply, code, session, invoiceNumber, paymentId, amountCents,
+                     locationId = credentials.locationId, publish] {
+                checkoutReply->deleteLater();
+                if (session != sessionGeneration)
+                    return;
+
+                const auto response = QJsonDocument::fromJson(checkoutReply->readAll()).object();
+                const auto link = response.value("payment_link").toObject();
+                const QUrl url(link.value("url").toString());
+                const QString orderId = link.value("order_id").toString();
+                if (checkoutReply->error() != QNetworkReply::NoError || orderId.isEmpty() || !Square::isCheckoutUrl(url)) {
+                    refreshSquareConnection();
+                    finishSquareLinkGeneration(tr("Square could not create the checkout. Check the Square connection and invoice amount."));
+                    return;
+                }
+
+                const QJsonObject checkout{
+                    {"code", Firestore::stringField(code)},
+                    {"invoiceNumber", Firestore::stringField(invoiceNumber)},
+                    {"amountCents", QJsonObject{{"integerValue", QString::number(amountCents)}}},
+                    {"orderId", Firestore::stringField(orderId)},
+                    {"locationId", Firestore::stringField(locationId)},
+                    {"url", Firestore::stringField(url.toString(QUrl::FullyEncoded))}
+                };
+                publish({Firestore::createInquiryWrite(QStringLiteral("invoiceSquareCheckouts"), paymentId, checkout)});
+            });
+        });
+    });
+}
+
+void MainIdyll::finishSquareLinkGeneration(const QString &message)
+{
+    generatingSquareLink = false;
+    updateInvoiceButtons();
+    ui->statusbar->showMessage(message);
 }
 
 void MainIdyll::reviewInvoicePayment()
@@ -131,7 +315,7 @@ void MainIdyll::reviewInvoicePayment()
                 return;
             const auto document = QJsonDocument::fromJson(choiceReply->readAll()).object();
             if (Firestore::isNotFound(choiceReply, document)) {
-                finishPaymentReview(tr("The customer has not selected a payment method."));
+                recordReceivedInvoicePayment(code, paymentId, invoiceNumber, amount);
                 return;
             }
             if (choiceReply->error() != QNetworkReply::NoError) {
@@ -165,6 +349,43 @@ void MainIdyll::reviewInvoicePayment()
             else
                 finishPaymentReview(tr("Payment is still awaiting manual review."));
         });
+    });
+}
+
+void MainIdyll::recordReceivedInvoicePayment(const QString &code, const QString &paymentId,
+                                              const QString &invoiceNumber, qint64 amountCents)
+{
+    const auto session = sessionGeneration;
+    const int approval = QMessageBox::question(this, tr("Record received payment"),
+        tr("Have you received the full payment of %1 for invoice %2 outside Square?")
+            .arg(cashAmount(amountCents), invoiceNumber),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (session != sessionGeneration)
+        return;
+
+    if (approval != QMessageBox::Yes) {
+        finishPaymentReview(tr("Payment is still outstanding."));
+        return;
+    }
+
+    auto write = Firestore::createInquiryWrite(QStringLiteral("invoicePaymentChoices"), paymentId, {
+        {"code", Firestore::stringField(code)},
+        {"method", Firestore::stringField(QStringLiteral("other"))},
+        {"status", Firestore::stringField(QStringLiteral("approved"))}
+    });
+    write.insert("updateTransforms", QJsonArray{
+        QJsonObject{{"fieldPath", "createdAt"}, {"setToServerValue", "REQUEST_TIME"}},
+        QJsonObject{{"fieldPath", "reviewedAt"}, {"setToServerValue", "REQUEST_TIME"}}
+    });
+    auto *reply = Firestore::commitWrites(network, idToken, {write});
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
+            return;
+
+        finishPaymentReview(reply->error() == QNetworkReply::NoError
+            ? tr("Payment recorded. The inquiry can now be marked Done!")
+            : tr("Could not record payment. Reload the inquiry to check for an existing payment."));
     });
 }
 

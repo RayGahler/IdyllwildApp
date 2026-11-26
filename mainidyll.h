@@ -30,6 +30,7 @@ class MainIdyll;
 QT_END_NAMESPACE
 
 class QListWidgetItem;
+class QAction;
 class QShowEvent;
 class QEvent;
 class QObject;
@@ -68,6 +69,12 @@ private:
                                   const QJsonObject &invoiceFields, const QJsonArray &extraWrites = {});
     void reportInvoicePublicationError(const QString &message);
     void configureSquarePayments();
+    enum class SquareConnection { Disconnected, Checking, Connected };
+    void refreshSquareConnection();
+    void setSquareConnection(SquareConnection connection);
+    void generateSquarePaymentLink();
+    void finishSquareLinkGeneration(const QString &message);
+    void updatePublicInvoice(const QJsonObject &fields);
     void reviewInvoicePayment();
     void finishPaymentReview(const QString &message);
     void checkPendingCardPayments();
@@ -75,6 +82,8 @@ private:
                                const QString &cardInquiryCode = {}, bool background = false);
     void verifySquarePayment(const QString &code, const QString &paymentId, const QString &updateTime,
                              bool background = false);
+    void recordReceivedInvoicePayment(const QString &code, const QString &paymentId,
+                                      const QString &invoiceNumber, qint64 amountCents);
     void finishSquareCheck(const QString &paymentId, bool background, const QString &message);
     QString invoiceInquiryCode() const;
     QString invoiceInquiryStatus() const;
@@ -147,6 +156,8 @@ private:
         QString code;
         quint64 revision = 0;
         bool loaded = false;
+        bool hasPayableInvoice = false;
+        bool hasSquareLink = false;
     };
     InquiryEditor publicInquiry;
     InquiryEditor privateInquiry;
@@ -157,6 +168,11 @@ private:
     int loginTitleSize = 0;
     bool savingInquiry = false;
     bool invoiceUploadInProgress = false;
+    QAction *squareConnectionStatus = nullptr;
+    SquareConnection squareConnection = SquareConnection::Disconnected;
+    quint64 squareConnectionRevision = 0;
+    qint64 squareConnectionCheckedAt = 0;
+    bool generatingSquareLink = false;
     bool paymentReviewInProgress = false;
     bool pendingCardQueryInProgress = false;
     QSet<QString> squarePaymentsInProgress;

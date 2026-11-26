@@ -10,8 +10,8 @@ On macOS, the kit also needs Qt Concurrent. Enable iCloud Drive in System Settin
 
 1. Deploy the website and its Firestore rules from the Website project.
 2. In Firebase Authentication, find each technician’s user UID. In the Firestore console, add an `invoiceStaff/<uid>` document for each authorized technician.
-3. On the Mac that publishes invoices, sign in and open **Preferences → Square payments**. Enter a production Square API token and the Square location ID. The app verifies the USD location and stores these credentials in macOS Keychain.
+3. On the Mac that publishes invoices, sign in and open **Square → Set up Square**. Enter a production Square API token and the Square location ID. The app verifies that the USD location accepts cards and stores the credentials in macOS Keychain. **Preferences** displays the connection status.
 
-Set the inquiry to **Ready For Pickup** and publish the invoice. The customer can then choose Card, Cash, Zelle, or Other on the website. Publishing prepares a single-use Square checkout for the grand total. Keep the app open and signed in on a Mac with Square connected so it can verify card payments, mark the inquiry **Done!**, and unlock the itemized PDF.
+Publish an invoice, then open its **Public record** and select **Generate Square link**. The app creates a single-use checkout for the grand total. Customers can select **Pay now** on the website when the inquiry is **Ready For Pickup**. Keep the app open and signed in on a Mac with Square connected so it can verify card payments, mark the inquiry **Done!**, and unlock the itemized PDF.
 
-Cash, Zelle, and Other send the inquiry to **Pending Payment Review** when the customer confirms payment. Use **Review invoice payment** on the Public record tab to approve payment received, then mark the inquiry **Done!** to make the PDF available.
+For payments received outside Square, use **Review invoice payment** on the Public record tab to record receipt, then mark the inquiry **Done!** to make the PDF available.

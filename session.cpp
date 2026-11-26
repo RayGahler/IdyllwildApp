@@ -114,6 +114,7 @@ void MainIdyll::finishSignIn(const QString &token, const QString &refresh, qint6
             ui->createContactButton->setEnabled(true);
             ui->scheduleRepairButton->setEnabled(true);
             pendingTimer.start();
+            refreshSquareConnection();
             checkPendingCardPayments();
             refreshPendingInquiries();
             refreshDeletedInquiries();
@@ -150,6 +151,10 @@ void MainIdyll::signOut()
         savingInquiry = false;
         refreshToken.clear();
         invoiceUploadInProgress = false;
+        generatingSquareLink = false;
+        ++squareConnectionRevision;
+        squareConnectionCheckedAt = 0;
+        setSquareConnection(SquareConnection::Disconnected);
         paymentReviewInProgress = false;
         pendingCardQueryInProgress = false;
         squarePaymentsInProgress.clear();

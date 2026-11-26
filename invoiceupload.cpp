@@ -2,7 +2,6 @@
 #include "repairstatus.h"
 #include "firestore.h"
 #include "invoice.h"
-#include "squarepayments.h"
 
 #include <ui_mainidyll.h>
 
@@ -135,7 +134,7 @@ void MainIdyll::publishExistingInvoice()
 void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &invoiceNumber,
                                  const QByteArray &pdfBytes, std::optional<qint64> amountDue)
 {
-    if (idToken.isEmpty() || localTestMode || invoiceUploadInProgress)
+    if (idToken.isEmpty() || localTestMode || invoiceUploadInProgress || generatingSquareLink)
         return;
     if (!pdfBytes.startsWith("%PDF-") || pdfBytes.size() > maximumInvoiceBytes) {
         showError(tr("Select a valid PDF no larger than 10 MB."));
@@ -143,12 +142,6 @@ void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &inv
     }
 
 #ifdef Q_OS_MACOS
-    if (amountDue.value_or(0) > 0 && !Square::savedCredentials().isConfigured()) {
-        QMessageBox::information(this, tr("Connect Square"),
-            tr("The PDF is saved locally. Connect your Square account from Preferences → Square payments, "
-               "then use Publish invoice PDF to share it."));
-        return;
-    }
     invoiceUploadInProgress = true;
     updateInvoiceButtons();
     ui->statusbar->showMessage(tr("Syncing the invoice PDF for %1 to iCloud Drive…").arg(inquiryCode));
@@ -267,52 +260,16 @@ void MainIdyll::saveInvoiceLink(const QString &code, const QString &invoiceNumbe
             return;
         }
 
-        const auto credentials = Square::savedCredentials();
-        if (!credentials.isConfigured()) {
-            reportInvoicePublicationError(tr("Connect your Square account in Preferences → Square payments."));
-            return;
-        }
-
         const QString paymentId = QUuid::createUuid().toString(QUuid::Id128);
-        const auto redirect = customerInvoiceUrl(code, invoiceNumber, QStringLiteral("card"));
-        const auto checkoutRequest = Square::checkoutPayload(credentials, paymentId, invoiceNumber, *amountDue, redirect);
-        auto *checkoutReply = network.post(Square::request(credentials, QStringLiteral("online-checkout/payment-links")),
-                                         QJsonDocument(checkoutRequest).toJson(QJsonDocument::Compact));
-        connect(checkoutReply, &QNetworkReply::finished, this,
-                [this, checkoutReply, session, paymentId, code, invoiceNumber, expiresAt, updateTime,
-                 amountCents = *amountDue, location = credentials.locationId, fields, previous, download]() mutable {
-            checkoutReply->deleteLater();
-            if (session != sessionGeneration)
-                return;
+        fields.insert("invoicePaymentId", Firestore::stringField(paymentId));
+        fields.insert("invoiceAmountCents", QJsonObject{{"integerValue", QString::number(*amountDue)}});
+        fields.insert("invoiceCardReady", QJsonObject{{"booleanValue", false}});
+        const auto status = RepairStatus::normalized(Firestore::readStringField(previous, "status"));
+        if (status == RepairStatus::done || status == RepairStatus::readyForPickup)
+            fields.insert("status", Firestore::stringField(RepairStatus::readyForPickup));
 
-            const auto result = QJsonDocument::fromJson(checkoutReply->readAll()).object();
-            const auto link = result.value("payment_link").toObject();
-            const QUrl url(link.value("url").toString());
-            const QString orderId = link.value("order_id").toString();
-            if (checkoutReply->error() != QNetworkReply::NoError || orderId.isEmpty() || !Square::isCheckoutUrl(url)) {
-                reportInvoicePublicationError(tr("Square could not create the checkout link. Check the Square connection and invoice amount."));
-                return;
-            }
-
-            const QJsonObject amount{{"integerValue", QString::number(amountCents)}};
-            fields.insert("invoicePaymentId", Firestore::stringField(paymentId));
-            fields.insert("invoiceAmountCents", amount);
-            const auto status = RepairStatus::normalized(Firestore::readStringField(previous, "status"));
-            if (status == RepairStatus::done || status == RepairStatus::readyForPickup)
-                fields.insert("status", Firestore::stringField(RepairStatus::readyForPickup));
-
-            const QJsonObject checkout{
-                {"code", Firestore::stringField(code)},
-                {"invoiceNumber", Firestore::stringField(invoiceNumber)},
-                {"amountCents", amount},
-                {"orderId", Firestore::stringField(orderId)},
-                {"locationId", Firestore::stringField(location)},
-                {"url", Firestore::stringField(url.toString(QUrl::FullyEncoded))}
-            };
-            finishInvoicePublication(code, invoiceNumber, expiresAt, updateTime, fields, {
-                Firestore::createInquiryWrite(QStringLiteral("invoiceSquareCheckouts"), paymentId, checkout),
-                Firestore::createInquiryWrite(QStringLiteral("invoiceDownloads"), paymentId, download)
-            });
+        finishInvoicePublication(code, invoiceNumber, expiresAt, updateTime, fields, {
+            Firestore::createInquiryWrite(QStringLiteral("invoiceDownloads"), paymentId, download)
         });
     });
 }

@@ -94,6 +94,8 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
                 if (isPublic) {
                     const QString status = RepairStatus::normalized(readStringField(fields, "status"));
                     publicStatusByCode.insert(documentId, status);
+                    if (documentId == publicInquiry.code)
+                        updatePublicInvoice(fields);
                     item->setToolTip(status);
                     const QColor color = RepairStatus::accent(status);
                     if (color.isValid())
@@ -186,6 +188,8 @@ void MainIdyll::loadCollectionRecord(bool isPublic, const QString &code)
     const auto revision = ++editor.revision;
     editor.code = code;
     editor.loaded = false;
+    editor.hasPayableInvoice = false;
+    editor.hasSquareLink = false;
     populateInquiryEditor(isPublic, {});
     auto *label = isPublic ? ui->publicSelectedCodeLabel : ui->privateSelectedCodeLabel;
     label->setText(code.isEmpty() ? tr("Select an inquiry") : code);
@@ -220,8 +224,10 @@ void MainIdyll::loadCollectionRecord(bool isPublic, const QString &code)
 
         const auto fields = document.value("fields").toObject();
         populateInquiryEditor(isPublic, fields);
-        if (isPublic)
+        if (isPublic) {
             publicStatusByCode.insert(code, RepairStatus::normalized(readStringField(fields, "status")));
+            updatePublicInvoice(fields);
+        }
         editor.loaded = true;
         updateInquiryActions();
     });

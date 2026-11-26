@@ -18,6 +18,7 @@ bool saveCredentials(const Credentials &credentials);
 QNetworkRequest request(const Credentials &credentials, const QString &path);
 QJsonObject checkoutPayload(const Credentials &credentials, const QString &paymentId,
                             const QString &invoiceNumber, qint64 amountCents, const QUrl &returnUrl);
+bool isActiveCardLocation(const QJsonObject &location, const QString &locationId);
 bool isCheckoutUrl(const QUrl &url);
 bool completedCardPaymentMatches(const QJsonObject &payment, const QString &paymentId,
                                  const QString &orderId, const QString &locationId, qint64 amountCents);

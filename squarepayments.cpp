@@ -1,5 +1,6 @@
 #include "squarepayments.h"
 
+#include <QJsonArray>
 #include <QUrl>
 
 namespace Square {
@@ -46,6 +47,14 @@ QJsonObject checkoutPayload(const Credentials &credentials, const QString &payme
             {"redirect_url", returnUrl.toString(QUrl::FullyEncoded)}
         }}
     };
+}
+
+bool isActiveCardLocation(const QJsonObject &location, const QString &locationId)
+{
+    return !locationId.isEmpty() && location.value("id").toString() == locationId
+        && location.value("status").toString() == QStringLiteral("ACTIVE")
+        && location.value("currency").toString() == QStringLiteral("USD")
+        && location.value("capabilities").toArray().contains(QStringLiteral("CREDIT_CARD_PROCESSING"));
 }
 
 bool isCheckoutUrl(const QUrl &url)

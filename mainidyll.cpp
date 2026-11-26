@@ -402,6 +402,7 @@ MainIdyll::MainIdyll(QWidget *parent)
     connect(ui->publicInquiryList, &QListWidget::itemSelectionChanged, this, &MainIdyll::updateDeleteButton);
     connect(ui->privateInquiryList, &QListWidget::itemSelectionChanged, this, &MainIdyll::updateDeleteButton);
     connect(ui->saveButton, &QPushButton::clicked, this, &MainIdyll::saveInquiry);
+    connect(ui->generateSquareLinkButton, &QPushButton::clicked, this, &MainIdyll::generateSquarePaymentLink);
     connect(ui->reviewPaymentButton, &QPushButton::clicked, this, &MainIdyll::reviewInvoicePayment);
     connect(ui->savePrivateButton, &QPushButton::clicked, this, &MainIdyll::savePrivateInquiry);
     connect(ui->createInvoiceButton, &QPushButton::clicked, this, &MainIdyll::openInvoiceMaker);
@@ -443,6 +444,8 @@ MainIdyll::MainIdyll(QWidget *parent)
         refreshCollection(QStringLiteral("publicInquiries"));
         refreshCollection(QStringLiteral("privateInquiries"));
         refreshDeletedInquiries(true);
+        if (QDateTime::currentSecsSinceEpoch() - squareConnectionCheckedAt >= 60)
+            refreshSquareConnection();
         checkPendingCardPayments();
     });
 
@@ -480,7 +483,12 @@ MainIdyll::MainIdyll(QWidget *parent)
     });
     auto *preferences = menuBar()->addMenu(tr("Preferences"));
 #ifdef Q_OS_MACOS
-    preferences->addAction(tr("Square payments…"), this, &MainIdyll::configureSquarePayments);
+    squareConnectionStatus = preferences->addAction(tr("Square API: Not connected"));
+    squareConnectionStatus->setObjectName(QStringLiteral("squareConnectionStatus"));
+    squareConnectionStatus->setEnabled(false);
+    connect(preferences, &QMenu::aboutToShow, this, &MainIdyll::refreshSquareConnection);
+    auto *square = menuBar()->addMenu(tr("Square"));
+    square->addAction(tr("Set up Square…"), this, &MainIdyll::configureSquarePayments);
 #endif
     auto *windowSize = preferences->addMenu(tr("Application size"));
     const QList<QPair<QString, QSize>> sizes{{tr("Compact (800 × 640)"), QSize(800, 640)},
@@ -727,10 +735,23 @@ void MainIdyll::updateInvoiceButtons()
     const QString code = invoiceInquiryCode();
     const bool available = !code.isEmpty() && invoiceStatusEligible();
     const bool enabled = available && !idToken.isEmpty() && !localTestMode
-        && !invoiceUploadInProgress;
+        && !invoiceUploadInProgress && !generatingSquareLink;
     ui->createInvoiceButton->setEnabled(enabled);
     ui->uploadInvoiceButton->setEnabled(enabled);
     const QString unavailable = tr("Load an active repair or completed inquiry to publish an invoice.");
     ui->createInvoiceButton->setToolTip(available ? tr("Create an invoice for %1.").arg(code) : unavailable);
     ui->uploadInvoiceButton->setToolTip(available ? tr("Publish an existing PDF or renew an invoice link.") : unavailable);
+
+    const QString publicStatus = publicStatusByCode.value(publicInquiry.code);
+    const bool active = publicStatus != RepairStatus::done && publicStatus != QStringLiteral("Canceled")
+        && publicStatus != RepairStatus::pendingPaymentReview;
+    const bool canGenerate = publicInquiry.loaded && publicInquiry.hasPayableInvoice && active
+        && squareConnection == SquareConnection::Connected
+        && !idToken.isEmpty() && !localTestMode && !generatingSquareLink && !invoiceUploadInProgress;
+    ui->generateSquareLinkButton->setEnabled(canGenerate && !publicInquiry.hasSquareLink);
+    ui->generateSquareLinkButton->setText(publicInquiry.hasSquareLink
+        ? tr("Square link published") : tr("Generate Square link"));
+    ui->generateSquareLinkButton->setToolTip(publicInquiry.hasSquareLink
+        ? tr("The checkout appears on the website when the repair is ready for pickup.")
+        : tr("Publish the invoice and connect Square to generate a checkout for its grand total."));
 }

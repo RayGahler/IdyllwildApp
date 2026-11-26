@@ -223,6 +223,10 @@
         <item>
          <layout class="QHBoxLayout" name="publicRecordActions">
           <item><spacer name="publicRecordActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+          <item><widget class="QPushButton" name="generateSquareLinkButton">
+           <property name="enabled"><bool>false</bool></property>
+           <property name="text"><string>Generate Square link</string></property>
+          </widget></item>
           <item><widget class="QPushButton" name="reviewPaymentButton">
            <property name="enabled"><bool>false</bool></property>
            <property name="text"><string>Review invoice payment</string></property>
