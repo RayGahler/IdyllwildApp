@@ -23,6 +23,9 @@ const QString localTestPassword = QStringLiteral("admin");
 
 void MainIdyll::signIn()
 {
+    if (screenTransitionInProgress || !ui->signInButton->isEnabled())
+        return;
+
 #ifdef IDYLLWILD_ENABLE_LOCAL_TEST_ACCOUNT
     if (ui->emailEdit->text().trimmed().compare(localTestUsername, Qt::CaseInsensitive) == 0
         && ui->passwordEdit->text() == localTestPassword) {
@@ -35,6 +38,7 @@ void MainIdyll::signIn()
     QNetworkRequest request(QUrl(QStringLiteral(
         "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=%1")
         .arg(apiKey)));
+    request.setTransferTimeout(15000);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     const QJsonObject body{
         {"email", ui->emailEdit->text().trimmed()},
@@ -79,129 +83,107 @@ void MainIdyll::signIn()
 void MainIdyll::finishSignIn(const QString &token, const QString &refresh, qint64 expiresAt,
                              bool localTestAccount)
 {
-    localTestMode = localTestAccount;
-    idToken = token;
-    refreshToken = refresh;
-    tokenExpiresAt = expiresAt;
-    ui->emailEdit->setEnabled(false);
-    ui->passwordEdit->clear();
-    ui->passwordEdit->setEnabled(false);
-    ui->signInButton->setText(localTestMode ? tr("Local test") : tr("Signed in"));
-    ui->signInButton->setEnabled(false);
-    ui->signOutButton->setEnabled(true);
-    ui->inquiryTabs->setEnabled(true);
-    menuBar()->show();
-    showAuthenticatedWorkspace();
+    transitionTo(ui->workspaceWidget, [this, token, refresh, expiresAt, localTestAccount] {
+        localTestMode = localTestAccount;
+        idToken = token;
+        refreshToken = refresh;
+        tokenExpiresAt = expiresAt;
+        ui->emailEdit->setEnabled(false);
+        ui->passwordEdit->clear();
+        ui->passwordEdit->setEnabled(false);
+        ui->signInButton->setText(localTestMode ? tr("Local test") : tr("Signed in"));
+        ui->signInButton->setEnabled(false);
+        ui->signOutButton->setEnabled(true);
+        ui->inquiryTabs->setEnabled(true);
+        menuBar()->show();
+        if (localTestMode) {
+            ui->signInGroup->setTitle(tr("Local test account · no cloud data"));
+            for (QPushButton *button : {ui->loadButton, ui->deleteInquiryButton,
+                                        ui->createInquiryButton, ui->createContactButton,
+                                        ui->scheduleRepairButton, ui->refreshPendingButton,
+                                        ui->refreshPublicButton, ui->refreshPrivateButton,
+                                        ui->refreshDeletedButton, ui->deletePendingButton,
+                                        ui->promotePendingButton, ui->saveButton,
+                                        ui->savePrivateButton, ui->permanentlyDeleteButton,
+                                        ui->createInvoiceButton, ui->uploadInvoiceButton})
+                button->setEnabled(false);
+            ui->statusbar->showMessage(tr("Local test mode: the workspace is empty and does not connect to Firebase."));
+        } else {
+            ui->loadButton->setEnabled(true);
+            ui->createInquiryButton->setEnabled(true);
+            ui->createContactButton->setEnabled(true);
+            ui->scheduleRepairButton->setEnabled(true);
+            pendingTimer.start();
+            refreshPendingInquiries();
+            refreshDeletedInquiries();
+            refreshCollection("publicInquiries");
+            refreshCollection("privateInquiries");
+            ui->statusbar->showMessage(tr("Signed in. Enter an inquiry code to load records."));
+        }
 
-    if (localTestMode) {
-        ui->signInGroup->setTitle(tr("Local test account · no cloud data"));
-        for (QPushButton *button : {ui->loadButton, ui->deleteInquiryButton,
-                                    ui->createInquiryButton, ui->createContactButton,
-                                    ui->scheduleRepairButton, ui->refreshPendingButton,
-                                    ui->refreshPublicButton, ui->refreshPrivateButton,
-                                    ui->refreshDeletedButton, ui->deletePendingButton,
-                                    ui->promotePendingButton, ui->saveButton,
-                                    ui->savePrivateButton, ui->permanentlyDeleteButton})
-            button->setEnabled(false);
-        ui->statusbar->showMessage(tr("Local test mode: the workspace is empty and does not connect to Firebase."));
-    } else {
-        ui->loadButton->setEnabled(true);
-        ui->createInquiryButton->setEnabled(true);
-        ui->createContactButton->setEnabled(true);
-        ui->scheduleRepairButton->setEnabled(true);
-        pendingTimer.start();
-        refreshPendingInquiries();
-        refreshDeletedInquiries();
-        refreshCollection("publicInquiries");
-        refreshCollection("privateInquiries");
-        ui->statusbar->showMessage(tr("Signed in. Enter an inquiry code to load records."));
-    }
-
-    updateGreeting();
-    ui->greetingLabel->show();
+        updateGreeting();
+    });
 }
 
 void MainIdyll::signOut()
 {
-    localTestMode = false;
-    menuBar()->hide();
-    ui->greetingLabel->hide();
-    ui->signInGroup->setTitle(QStringLiteral("Admin sign in"));
+    if (screenTransitionInProgress)
+        return;
+
     ++sessionGeneration;
     pendingTimer.stop();
     pendingSound.stop();
-    pendingRefreshInProgress = false;
-    pendingBaselineLoaded = false;
-    knownPendingIds.clear();
-    unreadPendingIds.clear();
-    updatePendingHighlight();
-    ui->refreshPendingButton->setEnabled(true);
-    idToken.clear();
-    refreshToken.clear();
-    loadedCode.clear();
-    publicSelectedCode.clear();
-    privateSelectedCode.clear();
-    pendingCode.clear();
-    selectedPendingData = {};
-    selectedPendingReceivedAt.clear();
-    publicLoaded = privateLoaded = false;
-    publicExists = privateExists = false;
-    savingPublic = savingPrivate = false;
-    promotingPublicDone = promotingPrivateDone = false;
+    transitionTo(ui->loginPage, [this] {
+        localTestMode = false;
+        menuBar()->hide();
+        ui->signInGroup->setTitle(QStringLiteral("Admin sign in"));
+        pendingRefreshInProgress = false;
+        pendingBaselineLoaded = false;
+        knownPendingIds.clear();
+        unreadPendingIds.clear();
+        updatePendingHighlight();
+        ui->refreshPendingButton->setEnabled(true);
+        idToken.clear();
+        publicInquiry = {};
+        privateInquiry = {};
+        savingInquiry = false;
+        refreshToken.clear();
+        invoiceUploadInProgress = false;
+        publicStatusByCode.clear();
 
-    ui->inquiryTabs->setEnabled(false);
-    ui->pendingList->clear();
-    ui->pendingList->setEnabled(true);
-    ui->deletedInquiryList->clear();
-    ui->deletedInquiryDetails->clear();
-    ui->deletedListStatus->clear();
-    ui->refreshDeletedButton->setEnabled(true);
-    ui->refreshPublicButton->setEnabled(true);
-    ui->refreshPrivateButton->setEnabled(true);
-    ui->publicInquiryList->clear();
-    ui->privateInquiryList->clear();
-    ui->pendingSelectedCodeLabel->setText(QStringLiteral("None"));
-    ui->publicSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
-    ui->privateSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
-    ui->pendingNameEdit->clear();
-    ui->pendingPhoneEdit->clear();
-    ui->pendingEmailEdit->clear();
-    ui->pendingDeviceEdit->clear();
-    ui->pendingModelEdit->clear();
-    ui->pendingProblemEdit->clear();
-    setPreferredContact(*ui->pendingPreferredEdit);
-    ui->pendingAddressEdit->clear();
-    ui->pendingStatusEdit->setCurrentIndex(0);
-    ui->pendingMessageEdit->clear();
-    ui->publicDeviceEdit->clear();
-    ui->publicModelEdit->clear();
-    ui->statusEdit->setCurrentIndex(0);
-    ui->publicMessageEdit->clear();
-    ui->nameEdit->clear();
-    ui->phoneEdit->clear();
-    ui->privateEmailEdit->clear();
-    ui->privateDeviceEdit->clear();
-    ui->privateModelEdit->clear();
-    ui->problemEdit->clear();
-    setPreferredContact(*ui->preferredContactEdit);
-    ui->addressEdit->clear();
-    ui->codeEdit->clear();
-    ui->emailEdit->clear();
-    ui->emailEdit->setEnabled(true);
-    ui->passwordEdit->clear();
-    ui->passwordEdit->setEnabled(true);
-    ui->signInButton->setText(QStringLiteral("Sign in"));
-    ui->signInButton->setEnabled(true);
-    ui->signOutButton->setEnabled(false);
-    ui->createInquiryButton->setEnabled(false);
-    ui->createContactButton->setEnabled(false);
-    ui->scheduleRepairButton->setEnabled(false);
-    ui->promotePendingButton->setEnabled(false);
-    ui->saveButton->setEnabled(false);
-    ui->savePrivateButton->setEnabled(false);
-    setPendingFieldsEnabled(false);
-    ui->statusbar->showMessage(QStringLiteral("Signed out."));
-    showSignedOutWorkspace();
+        ui->inquiryTabs->setEnabled(false);
+        ui->pendingList->clear();
+        ui->pendingList->setEnabled(true);
+        ui->deletedInquiryList->clear();
+        ui->deletedInquiryDetails->clear();
+        ui->deletedListStatus->clear();
+        ui->refreshDeletedButton->setEnabled(true);
+        ui->refreshPublicButton->setEnabled(true);
+        ui->refreshPrivateButton->setEnabled(true);
+        ui->publicInquiryList->clear();
+        ui->privateInquiryList->clear();
+        ui->publicSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
+        ui->privateSelectedCodeLabel->setText(QStringLiteral("Select an inquiry"));
+        clearPendingEditor();
+        populateInquiryEditor(true, {});
+        populateInquiryEditor(false, {});
+        ui->codeEdit->clear();
+        ui->emailEdit->clear();
+        ui->emailEdit->setEnabled(true);
+        ui->passwordEdit->clear();
+        ui->passwordEdit->setEnabled(true);
+        ui->signInButton->setText(QStringLiteral("Sign in"));
+        ui->signInButton->setEnabled(true);
+        ui->signOutButton->setEnabled(false);
+        ui->createInquiryButton->setEnabled(false);
+        ui->createContactButton->setEnabled(false);
+        ui->scheduleRepairButton->setEnabled(false);
+        ui->promotePendingButton->setEnabled(false);
+        ui->saveButton->setEnabled(false);
+        ui->savePrivateButton->setEnabled(false);
+        updateInquiryActions();
+        ui->statusbar->showMessage(QStringLiteral("Signed out."));
+    });
 }
 
 void MainIdyll::renewPendingSession(bool background)
@@ -211,6 +193,7 @@ void MainIdyll::renewPendingSession(bool background)
     query.addQueryItem("key", apiKey);
     url.setQuery(query);
     QNetworkRequest request(url);
+    request.setTransferTimeout(15000);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     const QByteArray body = "grant_type=refresh_token&refresh_token=" + QUrl::toPercentEncoding(refreshToken);
     const auto session = sessionGeneration;

@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QJsonDocument>
 #include <QNetworkRequest>
+#include <QSignalBlocker>
 #include <QUrlQuery>
 
 #include <utility>
@@ -18,7 +19,21 @@ using Firestore::inquiryCollectionUrl;
 using Firestore::inquiryUrl;
 using Firestore::isNotFound;
 using Firestore::readStringField;
-using Firestore::stringField;
+
+namespace {
+QString statusForEditor(const QString &status)
+{
+    const QString normalized = status.trimmed().toLower();
+    if (normalized == QStringLiteral("in progress") || normalized == QStringLiteral("in-progress")
+        || normalized == QStringLiteral("in-repair"))
+        return QStringLiteral("In Repair");
+    if (normalized == QStringLiteral("completed") || normalized == QStringLiteral("done"))
+        return QStringLiteral("Done!");
+    if (normalized == QStringLiteral("received"))
+        return QStringLiteral("Recieved");
+    return status.trimmed();
+}
+} // namespace
 
 void MainIdyll::refreshCollection(const QString &collection)
 {
@@ -42,6 +57,7 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         url.setQuery(query);
     }
     QNetworkRequest request(url);
+    request.setTransferTimeout(15000);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     const auto session = sessionGeneration;
     auto *reply = network.get(request);
@@ -70,58 +86,45 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         }
 
         auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
-        const QString previousSelection = list->currentItem()
-            ? list->currentItem()->data(Qt::UserRole + 1).toString()
-            : QString();
-        QSignalBlocker listSignals(list);
-        list->clear();
-        if (isPublic)
-            publicStatusByCode.clear();
-        QListWidgetItem *restoredSelection = nullptr;
-        for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
-            const QString documentId = document.value("name").toString().section('/', -1);
-            const auto fields = document.value("fields").toObject();
-            const QString code = readStringField(fields, "inquiryCode");
-            const QString displayCode = code.isEmpty() ? documentId : code;
-            auto *item = new QListWidgetItem(displayCode, list);
-            if (!previousSelection.isEmpty() && displayCode == previousSelection)
-                restoredSelection = item;
-            item->setData(Qt::UserRole, documentId);
-            item->setData(Qt::UserRole + 1, displayCode);
-            if (isPublic) {
-                const QString status = readStringField(fields, "status");
-                publicStatusByCode.insert(displayCode, status);
-                publicStatusByCode.insert(documentId, status);
-            } else {
-                applyPrivateInquiryStatus(item);
+        const auto *selected = list->currentItem();
+        const QString selectedId = selected ? selected->data(Qt::UserRole).toString() : QString();
+        bool selectionRestored = false;
+        {
+            const QSignalBlocker blocker(list);
+            list->clear();
+            if (isPublic)
+                publicStatusByCode.clear();
+            for (const auto &document : Firestore::newestInquiriesFirst(documents)) {
+                const QString documentId = document.value("name").toString().section('/', -1);
+                if (documentId.isEmpty())
+                    continue;
+                const auto fields = document.value("fields").toObject();
+                const QString code = readStringField(fields, "inquiryCode");
+                const QString displayCode = code.isEmpty() ? documentId : code;
+                auto *item = new QListWidgetItem(displayCode, list);
+                item->setData(Qt::UserRole, documentId);
+                item->setData(Qt::UserRole + 1, displayCode);
+                if (isPublic) {
+                    const QString status = statusForEditor(readStringField(fields, "status"));
+                    publicStatusByCode.insert(documentId, status);
+                } else {
+                    applyPrivateInquiryStatus(item);
+                }
+                if (documentId == selectedId) {
+                    list->setCurrentItem(item);
+                    selectionRestored = true;
+                }
             }
         }
+        if (!selectedId.isEmpty() && !selectionRestored)
+            loadCollectionRecord(isPublic, {});
+
         if (isPublic) {
             for (int row = 0; row < ui->privateInquiryList->count(); ++row)
                 applyPrivateInquiryStatus(ui->privateInquiryList->item(row));
         }
-        list->setCurrentItem(restoredSelection);
-        if (isPublic) {
-            publicSelectedCode = restoredSelection ? previousSelection : QString();
-            ui->publicSelectedCodeLabel->setText(restoredSelection ? previousSelection
-                                                                  : QStringLiteral("Select an inquiry"));
-            ui->saveButton->setEnabled(restoredSelection && !savingPublic);
-        } else {
-            privateSelectedCode = restoredSelection ? previousSelection : QString();
-            ui->privateSelectedCodeLabel->setText(restoredSelection ? previousSelection
-                                                                    : QStringLiteral("Select an inquiry"));
-            ui->savePrivateButton->setEnabled(restoredSelection && !savingPrivate);
-        }
-        if (!restoredSelection) {
-            auto *tab = isPublic ? ui->publicTab : ui->privateTab;
-            for (auto *edit : tab->findChildren<QLineEdit *>())
-                edit->clear();
-            for (auto *edit : tab->findChildren<QPlainTextEdit *>())
-                edit->clear();
-            if (!isPublic)
-                setPreferredContact(*ui->preferredContactEdit);
-        }
         applyPrivateInquiryFilter();
+        updateInvoiceButtons();
         refreshButton->setEnabled(true);
         updateDeleteButton();
     });
@@ -132,8 +135,9 @@ void MainIdyll::applyPrivateInquiryStatus(QListWidgetItem *item)
     if (!item)
         return;
     const QString code = item->data(Qt::UserRole + 1).toString();
-    const QString status = publicStatusByCode.value(code).trimmed();
+    const QString status = publicStatusByCode.value(item->data(Qt::UserRole).toString()).trimmed();
     const QString normalized = status.toLower();
+    item->setData(Qt::UserRole + 3, status);
     QString category = tr("Pending Review/In-Repair");
     QString bubbleLabel = tr("In-Progress");
     QColor foreground(QStringLiteral("#755600"));
@@ -169,62 +173,82 @@ void MainIdyll::applyPrivateInquiryFilter()
         const bool visible = filter == tr("All Inquiries") || filter == category;
         item->setHidden(!visible);
     }
+    if (const auto *selected = ui->privateInquiryList->currentItem(); selected && selected->isHidden())
+        ui->privateInquiryList->setCurrentItem(nullptr);
 }
 
-void MainIdyll::loadCollectionRecord(const QString &collection, const QString &code)
+void MainIdyll::loadCollectionRecord(bool isPublic, const QString &code)
 {
-    const bool isPublic = collection == "publicInquiries";
+    auto &editor = isPublic ? publicInquiry : privateInquiry;
+    const auto revision = ++editor.revision;
+    editor.code = code;
+    editor.loaded = false;
+    populateInquiryEditor(isPublic, {});
+    auto *label = isPublic ? ui->publicSelectedCodeLabel : ui->privateSelectedCodeLabel;
+    label->setText(code.isEmpty() ? tr("Select an inquiry") : code);
+    updateInquiryActions();
+    if (code.isEmpty() || idToken.isEmpty())
+        return;
+
+    const QString collection = isPublic ? QStringLiteral("publicInquiries")
+                                        : QStringLiteral("privateInquiries");
     const auto session = sessionGeneration;
     QNetworkRequest request(inquiryUrl(collection, code));
+    request.setTransferTimeout(15000);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, session] {
-        if (session != sessionGeneration) {
-            reply->deleteLater();
-            return;
-        }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(reply->errorString()));
-            reply->deleteLater();
-            return;
-        }
-        const auto fields = response.value("fields").toObject();
-        if (isPublic) {
-            if (publicSelectedCode != code) {
-                reply->deleteLater();
-                return;
-            }
-            ui->publicSelectedCodeLabel->setText(code);
-            ui->publicDeviceEdit->setText(readStringField(fields, "device"));
-            ui->publicModelEdit->setText(readStringField(fields, "model"));
-            QString status = readStringField(fields, "status");
-            if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
-                status = QStringLiteral("Recieved");
-            int statusIndex = ui->statusEdit->findText(status, Qt::MatchFixedString);
-            ui->statusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
-            ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
-            if (!savingPublic)
-                ui->saveButton->setEnabled(true);
-        } else {
-            if (privateSelectedCode != code) {
-                reply->deleteLater();
-                return;
-            }
-            ui->privateSelectedCodeLabel->setText(code);
-            ui->nameEdit->setText(readStringField(fields, "name"));
-            ui->phoneEdit->setText(readStringField(fields, "phone"));
-            ui->privateEmailEdit->setText(readStringField(fields, "email"));
-            ui->privateDeviceEdit->setText(readStringField(fields, "device"));
-            ui->privateModelEdit->setText(readStringField(fields, "model"));
-            ui->problemEdit->setPlainText(readStringField(fields, "problem"));
-            setPreferredContact(*ui->preferredContactEdit, readStringField(fields, "preferredContact"));
-            ui->addressEdit->setPlainText(readStringField(fields, "address"));
-            if (!savingPrivate)
-                ui->savePrivateButton->setEnabled(true);
-        }
+    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, session, revision] {
         reply->deleteLater();
+        auto &editor = isPublic ? publicInquiry : privateInquiry;
+        if (session != sessionGeneration || revision != editor.revision)
+            return;
+
+        const auto document = QJsonDocument::fromJson(reply->readAll()).object();
+        if (isNotFound(reply, document)) {
+            showError(isPublic ? tr("Public inquiry %1 was not found.").arg(code)
+                               : tr("Private inquiry %1 was not found.").arg(code));
+            return;
+        }
+        const auto error = document.value("error").toObject();
+        if (reply->error() != QNetworkReply::NoError || !error.isEmpty()) {
+            showError(Firestore::firestoreError(error, reply->errorString()));
+            return;
+        }
+
+        const auto fields = document.value("fields").toObject();
+        populateInquiryEditor(isPublic, fields);
+        if (isPublic)
+            publicStatusByCode.insert(code, statusForEditor(readStringField(fields, "status")));
+        editor.loaded = true;
+        updateInquiryActions();
     });
+}
+
+void MainIdyll::populateInquiryEditor(bool isPublic, const QJsonObject &fields)
+{
+    if (isPublic) {
+        ui->publicDeviceEdit->setText(readStringField(fields, "device"));
+        ui->publicModelEdit->setText(readStringField(fields, "model"));
+        ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
+        const QString status = statusForEditor(readStringField(fields, "status"));
+        const int index = ui->statusEdit->findText(status, Qt::MatchFixedString);
+        if (index < 0 && !status.isEmpty()) {
+            ui->statusEdit->addItem(status);
+            ui->statusEdit->setCurrentIndex(ui->statusEdit->count() - 1);
+        } else {
+            ui->statusEdit->setCurrentIndex(qMax(0, index));
+        }
+        return;
+    }
+
+    ui->nameEdit->setText(readStringField(fields, "name"));
+    ui->phoneEdit->setText(readStringField(fields, "phone"));
+    ui->privateEmailEdit->setText(readStringField(fields, "email"));
+    ui->privateDeviceEdit->setText(readStringField(fields, "device"));
+    ui->privateModelEdit->setText(readStringField(fields, "model"));
+    ui->problemEdit->setPlainText(readStringField(fields, "problem"));
+    ui->addressEdit->setPlainText(readStringField(fields, "address"));
+    setPreferredContact(*ui->preferredContactEdit, readStringField(fields, "preferredContact"));
 }
 
 void MainIdyll::loadInquiry()
@@ -232,93 +256,14 @@ void MainIdyll::loadInquiry()
     const QString code = ui->codeEdit->text().trimmed().toUpper();
     if (code.isEmpty() || idToken.isEmpty())
         return;
-    loadedCode = code;
-    publicLoaded = privateLoaded = false;
-    publicExists = privateExists = false;
+
+    for (auto *list : {ui->publicInquiryList, ui->privateInquiryList}) {
+        const QSignalBlocker blocker(list);
+        list->setCurrentItem(nullptr);
+    }
     ui->codeEdit->setText(code);
-    ui->loadButton->setEnabled(false);
-    ui->saveButton->setEnabled(false);
-    ui->statusbar->showMessage(QStringLiteral("Loading inquiry…"));
-    loadPublicRecord();
-    loadPrivateRecord();
-}
-
-void MainIdyll::loadPublicRecord()
-{
-    const auto session = sessionGeneration;
-    const QString code = loadedCode;
-    QNetworkRequest request(inquiryUrl("publicInquiries", code));
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code] {
-        if (session != sessionGeneration || code != loadedCode) {
-            reply->deleteLater();
-            return;
-        }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (isNotFound(reply, response)) {
-            publicExists = false;
-        } else if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(reply->errorString()));
-            publicLoaded = true;
-            reply->deleteLater();
-            updateButtons();
-            return;
-        } else {
-            const auto fields = response.value("fields").toObject();
-            ui->publicDeviceEdit->setText(readStringField(fields, "device"));
-            ui->publicModelEdit->setText(readStringField(fields, "model"));
-            QString status = readStringField(fields, "status");
-            if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
-                status = QStringLiteral("Recieved");
-            int statusIndex = ui->statusEdit->findText(status, Qt::MatchFixedString);
-            ui->statusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
-            ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
-            publicExists = true;
-        }
-        publicLoaded = true;
-        reply->deleteLater();
-        updateButtons();
-    });
-}
-
-void MainIdyll::loadPrivateRecord()
-{
-    const auto session = sessionGeneration;
-    const QString code = loadedCode;
-    QNetworkRequest request(inquiryUrl("privateInquiries", code));
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code] {
-        if (session != sessionGeneration || code != loadedCode) {
-            reply->deleteLater();
-            return;
-        }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (isNotFound(reply, response)) {
-            privateExists = false;
-        } else if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(reply->errorString()));
-            privateLoaded = true;
-            reply->deleteLater();
-            updateButtons();
-            return;
-        } else {
-            const auto fields = response.value("fields").toObject();
-            ui->nameEdit->setText(readStringField(fields, "name"));
-            ui->phoneEdit->setText(readStringField(fields, "phone"));
-            ui->privateEmailEdit->setText(readStringField(fields, "email"));
-            ui->privateDeviceEdit->setText(readStringField(fields, "device"));
-            ui->privateModelEdit->setText(readStringField(fields, "model"));
-            ui->problemEdit->setPlainText(readStringField(fields, "problem"));
-            setPreferredContact(*ui->preferredContactEdit, readStringField(fields, "preferredContact"));
-            ui->addressEdit->setPlainText(readStringField(fields, "address"));
-            privateExists = true;
-        }
-        privateLoaded = true;
-        reply->deleteLater();
-        updateButtons();
-    });
+    loadCollectionRecord(true, code);
+    loadCollectionRecord(false, code);
 }
 
 QJsonObject MainIdyll::publicFields() const
@@ -347,157 +292,83 @@ QJsonObject MainIdyll::privateFields() const
 
 void MainIdyll::saveInquiry()
 {
-    if (publicSelectedCode.isEmpty() || idToken.isEmpty())
-        return;
-    loadedCode = publicSelectedCode;
-    savingPublic = savingPrivate = true;
-    updateDeleteButton();
-    ui->saveButton->setEnabled(false);
-    ui->savePrivateButton->setEnabled(false);
-    ui->statusbar->showMessage(QStringLiteral("Saving public inquiry and shared device/model fields…"));
-    const QString code = publicSelectedCode;
-    const QJsonObject shared{{"device", ui->publicDeviceEdit->text().trimmed()},
-                             {"model", ui->publicModelEdit->text().trimmed()}};
-    saveSingleRecord("publicInquiries", publicFields());
-    saveSingleRecord("privateInquiries", shared);
+    saveInquiryRecords(true);
 }
 
 void MainIdyll::savePrivateInquiry()
 {
-    if (privateSelectedCode.isEmpty() || idToken.isEmpty())
-        return;
-    loadedCode = privateSelectedCode;
-    savingPrivate = savingPublic = true;
-    updateDeleteButton();
-    ui->savePrivateButton->setEnabled(false);
-    ui->saveButton->setEnabled(false);
-    ui->statusbar->showMessage(QStringLiteral("Saving private inquiry and shared device/model fields…"));
-    const QJsonObject fields = privateFields();
-    const QJsonObject shared{{"device", fields.value("device")},
-                             {"model", fields.value("model")}};
-    saveSingleRecord("privateInquiries", fields);
-    saveSingleRecord("publicInquiries", shared);
+    saveInquiryRecords(false);
 }
 
-void MainIdyll::saveSingleRecord(const QString &collection, const QJsonObject &fields)
+void MainIdyll::saveInquiryRecords(bool isPublic)
 {
-    const bool isPublic = collection == "publicInquiries";
-    const bool exists = true;
-    const QString code = isPublic ? publicSelectedCode : privateSelectedCode;
-    if (code.isEmpty()) {
-        (isPublic ? savingPublic : savingPrivate) = false;
+    const auto &editor = isPublic ? publicInquiry : privateInquiry;
+    if (idToken.isEmpty() || savingInquiry || !editor.loaded)
         return;
-    }
-    QJsonObject documentFields{{"inquiryCode", stringField(code)}};
-    for (auto it = fields.begin(); it != fields.end(); ++it)
-        documentFields.insert(it.key(), stringField(it.value().toString()));
-    QUrl url = inquiryUrl(collection, code);
-    QUrlQuery query;
-    for (auto it = documentFields.begin(); it != documentFields.end(); ++it)
-        query.addQueryItem("updateMask.fieldPaths", it.key());
-    query.addQueryItem("updateMask.fieldPaths", "updatedAt");
-    if (!exists)
-        query.addQueryItem("updateMask.fieldPaths", "createdAt");
-    url.setQuery(query);
 
-    QJsonObject encoded = documentFields;
+    const QString code = editor.code;
+    const auto fields = isPublic ? publicFields() : privateFields();
+    const QJsonObject shared{{"device", fields.value("device")}, {"model", fields.value("model")}};
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-    encoded.insert("updatedAt", QJsonObject{{"timestampValue", now}});
-    if (!exists)
-        encoded.insert("createdAt", QJsonObject{{"timestampValue", now}});
-    QNetworkRequest request(url);
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    auto *reply = network.sendCustomRequest(
-        request, "PATCH", QJsonDocument(QJsonObject{{"fields", encoded}}).toJson());
+    const auto write = [&code, &now](const QString &collection, QJsonObject data, bool requireExisting) {
+        data.insert("inquiryCode", code);
+        auto encoded = firestoreFields(data);
+        encoded.insert("updatedAt", QJsonObject{{"timestampValue", now}});
+        QJsonArray fieldPaths;
+        for (auto it = encoded.constBegin(); it != encoded.constEnd(); ++it)
+            fieldPaths.append(it.key());
+
+        const QString name = QStringLiteral("%1/%2/%3").arg(Firestore::documentsPath(), collection, code);
+        QJsonObject update{
+            {"update", QJsonObject{{"name", name}, {"fields", encoded}}},
+            {"updateMask", QJsonObject{{"fieldPaths", fieldPaths}}}
+        };
+        if (requireExisting)
+            update.insert("currentDocument", QJsonObject{{"exists", true}});
+        return update;
+    };
+
+    savingInquiry = true;
+    updateInquiryActions();
+    ui->statusbar->showMessage(tr("Saving inquiry %1…").arg(code));
     const auto session = sessionGeneration;
-    const bool updatesStatus = isPublic && fields.contains(QStringLiteral("status"));
-    const QString savedStatus = fields.value(QStringLiteral("status")).toString();
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, code, updatesStatus, savedStatus, session] {
-        if (session != sessionGeneration) {
-            reply->deleteLater();
+    auto *reply = Firestore::commitWrites(network, idToken, {
+        write(QStringLiteral("publicInquiries"), isPublic ? fields : shared, isPublic),
+        write(QStringLiteral("privateInquiries"), isPublic ? shared : fields, !isPublic)
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code, isPublic, fields, shared] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
             return;
-        }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(reply->errorString()));
+
+        savingInquiry = false;
+        const auto result = QJsonDocument::fromJson(reply->readAll()).object();
+        const auto error = result.value("error").toObject();
+        if (reply->error() != QNetworkReply::NoError || !error.isEmpty()) {
+            showError(tr("Could not save inquiry %1. %2").arg(
+                code, Firestore::firestoreError(error, reply->errorString())));
         } else {
-            ui->statusbar->showMessage(QStringLiteral("Saved %1 inquiry %2.")
-                                           .arg(isPublic ? QStringLiteral("public") : QStringLiteral("private"), code));
-            if (updatesStatus) {
-                publicStatusByCode.insert(code, savedStatus);
+            if (isPublic) {
+                publicStatusByCode.insert(code, fields.value("status").toString());
                 for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
                     auto *item = ui->privateInquiryList->item(row);
-                    if (item->data(Qt::UserRole + 1).toString() == code)
+                    if (item->data(Qt::UserRole).toString() == code)
                         applyPrivateInquiryStatus(item);
                 }
                 applyPrivateInquiryFilter();
             }
-        }
-        if (isPublic)
-            savingPublic = false;
-        else
-            savingPrivate = false;
-        ui->saveButton->setEnabled(!publicSelectedCode.isEmpty() && !savingPublic);
-        ui->savePrivateButton->setEnabled(!privateSelectedCode.isEmpty() && !savingPrivate);
-        updateDeleteButton();
-        reply->deleteLater();
-    });
-}
 
-void MainIdyll::saveRecord(const QString &collection, const QJsonObject &fields)
-{
-    const auto session = sessionGeneration;
-    const QString code = loadedCode;
-    QUrl url = inquiryUrl(collection, code);
-    QUrlQuery query;
-    for (auto it = fields.begin(); it != fields.end(); ++it)
-        query.addQueryItem("updateMask.fieldPaths", it.key());
-    query.addQueryItem("updateMask.fieldPaths", "updatedAt");
-    if (!publicExists && collection == "publicInquiries")
-        query.addQueryItem("updateMask.fieldPaths", "createdAt");
-    if (!privateExists && collection == "privateInquiries")
-        query.addQueryItem("updateMask.fieldPaths", "createdAt");
-    url.setQuery(query);
-
-    QJsonObject encoded = firestoreFields(fields);
-    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-    encoded.insert("updatedAt", QJsonObject{{"timestampValue", now}});
-    if ((!publicExists && collection == "publicInquiries")
-        || (!privateExists && collection == "privateInquiries"))
-        encoded.insert("createdAt", QJsonObject{{"timestampValue", now}});
-
-    QNetworkRequest request(url);
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    auto *reply = network.sendCustomRequest(
-        request, "PATCH", QJsonDocument(QJsonObject{{"fields", encoded}}).toJson());
-    const bool isPublic = collection == "publicInquiries";
-    connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, session, code] {
-        if (session != sessionGeneration || code != loadedCode) {
-            reply->deleteLater();
-            return;
+            const auto &other = isPublic ? privateInquiry : publicInquiry;
+            if (other.loaded && other.code == code) {
+                auto *device = isPublic ? ui->privateDeviceEdit : ui->publicDeviceEdit;
+                auto *model = isPublic ? ui->privateModelEdit : ui->publicModelEdit;
+                if (!device->isModified())
+                    device->setText(shared.value("device").toString());
+                if (!model->isModified())
+                    model->setText(shared.value("model").toString());
+            }
+            ui->statusbar->showMessage(tr("Inquiry %1 saved.").arg(code));
         }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(
-                reply->errorString()));
-            ui->statusbar->setProperty("saveFailed", true);
-        } else if (isPublic) {
-            publicExists = true;
-        } else {
-            privateExists = true;
-        }
-        if (isPublic)
-            savingPublic = false;
-        else
-            savingPrivate = false;
-        if (!savingPublic && !savingPrivate && !ui->statusbar->property("saveFailed").toBool()) {
-            ui->statusbar->showMessage(QStringLiteral("Inquiry saved."));
-        }
-        if (!savingPublic && !savingPrivate)
-            ui->statusbar->setProperty("saveFailed", false);
-        updateButtons();
-        reply->deleteLater();
+        updateInquiryActions();
     });
 }

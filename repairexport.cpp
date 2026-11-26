@@ -22,31 +22,30 @@ void MainIdyll::openRepairExport(bool schedule)
         return;
 
     const auto *tab = ui->inquiryTabs->currentWidget();
-    const QListWidgetItem *selected = nullptr;
+    QString code;
     QString collection = QStringLiteral("privateInquiries");
     if (tab == ui->pendingTab) {
-        selected = ui->pendingList->currentItem();
+        code = pendingCode;
         collection = QStringLiteral("pendingInquiries");
     } else if (tab == ui->privateTab) {
-        selected = ui->privateInquiryList->currentItem();
+        code = privateInquiry.code;
     } else if (tab == ui->publicTab) {
-        selected = ui->publicInquiryList->currentItem();
+        code = publicInquiry.code;
     }
 
-    if (!selected) {
+    if (code.isEmpty()) {
         showRepairExport(schedule, {}, {});
         return;
     }
 
-    const QString code = selected->data(Qt::UserRole).toString();
-    const QString displayCode = selected->text();
     const auto session = sessionGeneration;
     QNetworkRequest request(Firestore::inquiryUrl(collection, code));
+    request.setTransferTimeout(15000);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     ui->createContactButton->setEnabled(false);
     ui->scheduleRepairButton->setEnabled(false);
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, session, schedule, displayCode] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, schedule, code] {
         reply->deleteLater();
         if (session != sessionGeneration)
             return;
@@ -56,19 +55,22 @@ void MainIdyll::openRepairExport(bool schedule)
         const auto document = QJsonDocument::fromJson(reply->readAll()).object();
         if (reply->error() != QNetworkReply::NoError) {
             showError(tr("Could not load inquiry %1 for the export. %2")
-                          .arg(displayCode, Firestore::firestoreError(
+                          .arg(code, Firestore::firestoreError(
                               document.value("error").toObject(), reply->errorString())));
             if (!Firestore::isNotFound(reply, document))
                 return;
         }
 
-        showRepairExport(schedule, displayCode, document.value("fields").toObject());
+        showRepairExport(schedule, code, document.value("fields").toObject());
     });
 }
 
 void MainIdyll::showRepairExport(bool schedule, const QString &inquiryCode, const QJsonObject &fields)
 {
     QDialog dialog(this);
+    dialog.setWindowFlag(Qt::Dialog, true);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setModal(true);
     dialog.setWindowTitle(schedule ? tr("Schedule repair") : tr("Create contact"));
     auto *form = new QFormLayout(&dialog);
     const auto read = [&fields](const QString &key) { return Firestore::readStringField(fields, key); };

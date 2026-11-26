@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationName(QStringLiteral("Idyllwild"));
     // Keep the stable application name for QSettings and other stored data.
     QApplication::setApplicationName(QStringLiteral("IdyllwildApp"));
-    QApplication::setApplicationDisplayName(QStringLiteral("Idyllwild A.R.I.F"));
+    QApplication::setApplicationDisplayName(QStringLiteral("ADMIN INQUIRY FIREBASE PANEL"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/branding/app-icon.png")));
     MainIdyll w;
 #ifdef IDYLLWILD_MAC_UPDATES

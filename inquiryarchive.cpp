@@ -20,7 +20,7 @@ using Firestore::firestoreError;
 using Firestore::inquiryCollectionUrl;
 using Firestore::inquiryUrl;
 using Firestore::isNotFound;
-using Firestore::projectId;
+using Firestore::documentsPath;
 using Firestore::readStringField;
 using Firestore::stringField;
 
@@ -29,10 +29,6 @@ const QString deletedCollection = QStringLiteral("deletedInquiries");
 constexpr int archiveIdRole = Qt::UserRole + 1;
 constexpr int archiveVersionRole = Qt::UserRole + 2;
 
-QString documentsPath()
-{
-    return QStringLiteral("projects/%1/databases/(default)/documents").arg(projectId);
-}
 }
 
 void MainIdyll::refreshDeletedInquiries(bool preserveSelection)
@@ -224,6 +220,7 @@ void MainIdyll::showDeletedInquiry(QListWidgetItem *item)
 void MainIdyll::updatePermanentDeleteButton()
 {
     const auto *item = ui->deletedInquiryList->currentItem();
+    ui->permanentlyDeleteButton->setVisible(ui->inquiryTabs->currentWidget() == ui->deletedTab);
     ui->permanentlyDeleteButton->setEnabled(!idToken.isEmpty() && ui->refreshDeletedButton->isEnabled()
         && item && !item->data(archiveIdRole).toString().isEmpty()
         && !item->data(archiveVersionRole).toString().isEmpty());
@@ -252,7 +249,7 @@ void MainIdyll::permanentlyDeleteInquiry()
     ui->deletedListStatus->setText(tr("Deleting archived inquiry…"));
 
     const QString name = documentsPath() + "/" + deletedCollection + "/" + archiveId;
-    auto *reply = commitArchiveWrites({QJsonObject{
+    auto *reply = Firestore::commitWrites(network, idToken, {QJsonObject{
         {"delete", name},
         {"currentDocument", QJsonObject{{"updateTime", updateTime}}}
     }});
@@ -283,14 +280,6 @@ void MainIdyll::permanentlyDeleteInquiry()
     });
 }
 
-QNetworkReply *MainIdyll::commitArchiveWrites(const QJsonArray &writes)
-{
-    QNetworkRequest request(QUrl("https://firestore.googleapis.com/v1/" + documentsPath() + ":commit"));
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    return network.post(request, QJsonDocument(QJsonObject{{"writes", writes}}).toJson(QJsonDocument::Compact));
-}
-
 QListWidgetItem *MainIdyll::selectedInquiry() const
 {
     QListWidget *list = nullptr;
@@ -305,7 +294,7 @@ QListWidgetItem *MainIdyll::selectedInquiry() const
 
 void MainIdyll::updateDeleteButton()
 {
-    ui->deleteInquiryButton->setEnabled(!idToken.isEmpty() && !savingPublic && !savingPrivate
+    ui->deleteInquiryButton->setEnabled(!idToken.isEmpty() && !savingInquiry
                                         && ui->refreshPublicButton->isEnabled()
                                         && ui->refreshPrivateButton->isEnabled()
                                         && selectedInquiry());
@@ -428,7 +417,7 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
                 {"update", QJsonObject{{"name", archiveName}, {"fields", archive->fields}}},
                 {"currentDocument", QJsonObject{{"exists", false}}}
             });
-            auto *commit = commitArchiveWrites(archive->writes);
+            auto *commit = Firestore::commitWrites(network, idToken, archive->writes);
             connect(commit, &QNetworkReply::finished, this, [this, commit, fail, code, label, fromPending] {
                 const auto result = QJsonDocument::fromJson(commit->readAll()).object();
                 commit->deleteLater();
@@ -449,29 +438,12 @@ void MainIdyll::archiveInquiry(const QString &code, const QString &label, bool f
                 if (fromPending) {
                     removePendingInquiryFromList(code);
                 } else {
-                    const bool lookupMatches = loadedCode == code;
-                    if (lookupMatches) {
-                        loadedCode.clear();
-                        publicLoaded = privateLoaded = false;
-                        publicExists = privateExists = false;
-                    }
+                    if (publicInquiry.code == code)
+                        loadCollectionRecord(true, {});
+                    if (privateInquiry.code == code)
+                        loadCollectionRecord(false, {});
                     for (auto *list : {ui->publicInquiryList, ui->privateInquiryList}) {
-                        const auto *current = list->currentItem();
-                        const bool currentMatches = current && current->data(Qt::UserRole).toString() == code;
-                        if (currentMatches)
-                            list->setCurrentItem(nullptr);
-                        if (currentMatches || (lookupMatches && !current)) {
-                            const bool isPublic = list == ui->publicInquiryList;
-                            auto *tab = isPublic ? ui->publicTab : ui->privateTab;
-                            auto *selectionLabel = isPublic ? ui->publicSelectedCodeLabel : ui->privateSelectedCodeLabel;
-                            selectionLabel->setText(tr("Select an inquiry"));
-                            for (auto *edit : tab->findChildren<QLineEdit *>())
-                                edit->clear();
-                            for (auto *edit : tab->findChildren<QPlainTextEdit *>())
-                                edit->clear();
-                            if (!isPublic)
-                                setPreferredContact(*ui->preferredContactEdit);
-                        }
+                        const QSignalBlocker blocker(list);
                         for (int row = list->count() - 1; row >= 0; --row) {
                             if (list->item(row)->data(Qt::UserRole).toString() == code)
                                 delete list->takeItem(row);

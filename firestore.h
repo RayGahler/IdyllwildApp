@@ -9,11 +9,17 @@
 #include <QUrl>
 
 class QNetworkReply;
+class QNetworkAccessManager;
 
 namespace Firestore {
 
 extern const QString projectId;
 
+QString documentsPath();
+QJsonObject createInquiryWrite(const QString &collection, const QString &code,
+                               const QJsonObject &fields);
+QNetworkReply *commitWrites(QNetworkAccessManager &network, const QString &idToken,
+                            const QJsonArray &writes);
 QUrl inquiryUrl(const QString &collection, const QString &code);
 QUrl inquiryCollectionUrl(const QString &collection);
 QDateTime inquiryReceivedAt(const QJsonObject &document);

@@ -2,6 +2,9 @@
 #define MAINIDYLL_H
 
 #include <QMainWindow>
+#include <QByteArray>
+#include <QDateTime>
+#include <QMargins>
 #include <QResizeEvent>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -12,7 +15,11 @@
 #include <QSoundEffect>
 #include <QTimer>
 #include <QString>
+#include <QImage>
 #include <QPixmap>
+#include <QUrl>
+
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -21,6 +28,9 @@ class MainIdyll;
 QT_END_NAMESPACE
 
 class QListWidgetItem;
+class QShowEvent;
+class QEvent;
+class QObject;
 
 class MainIdyll : public QMainWindow
 {
@@ -32,6 +42,8 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void signIn();
@@ -43,6 +55,17 @@ private:
     void openCreateInquiry();
     void openRepairExport(bool schedule);
     void showRepairExport(bool schedule, const QString &inquiryCode, const QJsonObject &fields);
+    void openInvoiceMaker();
+    void publishExistingInvoice();
+    void publishInvoicePdf(const QString &inquiryCode, const QString &invoiceNumber,
+                           const QByteArray &pdfBytes);
+    void saveInvoiceLink(const QString &inquiryCode, const QString &invoiceNumber,
+                         const QUrl &downloadUrl, const QDateTime &expiresAt);
+    QString invoiceInquiryCode() const;
+    QString invoiceInquiryStatus() const;
+    bool invoiceStatusEligible() const;
+    void updateInvoiceButtons();
+    void applyMacSafeArea();
     void postNewInquiry(const QString &code, const QJsonObject &publicData,
                         const QJsonObject &privateData);
 
@@ -51,23 +74,22 @@ private:
     void applyPendingList(const QJsonArray &documents);
     void updatePendingHighlight();
     void setPendingFieldsEnabled(bool enabled);
-    void loadPendingInquiry(const QString &code);
+    void loadPendingInquiry();
+    void clearPendingEditor();
+    void populatePendingEditor(const QJsonObject &fields);
     void promotePendingInquiry();
-    void finishPendingPromotion();
     void removePendingInquiryFromList(const QString &code);
 
     void refreshCollection(const QString &collection);
     void loadCollectionPage(const QString &collection, const QString &pageToken, QJsonArray documents);
-    void loadCollectionRecord(const QString &collection, const QString &code);
+    void loadCollectionRecord(bool isPublic, const QString &code);
+    void populateInquiryEditor(bool isPublic, const QJsonObject &fields);
     void loadInquiry();
-    void loadPublicRecord();
-    void loadPrivateRecord();
     QJsonObject publicFields() const;
     QJsonObject privateFields() const;
     void saveInquiry();
     void savePrivateInquiry();
-    void saveSingleRecord(const QString &collection, const QJsonObject &fields);
-    void saveRecord(const QString &collection, const QJsonObject &fields);
+    void saveInquiryRecords(bool isPublic);
 
     void refreshDeletedInquiries(bool preserveSelection = false);
     void loadDeletedPage(const QString &pageToken, bool preserveSelection = false,
@@ -75,7 +97,6 @@ private:
     void showDeletedInquiry(QListWidgetItem *item);
     void updatePermanentDeleteButton();
     void permanentlyDeleteInquiry();
-    QNetworkReply *commitArchiveWrites(const QJsonArray &writes);
     QListWidgetItem *selectedInquiry() const;
     void updateDeleteButton();
     void updatePendingDeleteButton();
@@ -84,10 +105,10 @@ private:
     void archiveInquiry(const QString &code, const QString &label, bool fromPending);
 
     void showError(const QString &message);
-    void updateButtons();
-    void showAuthenticatedWorkspace();
-    void showSignedOutWorkspace();
+    void updateInquiryActions();
+    void transitionTo(QWidget *page, std::function<void()> onSwitch);
     void updateGreeting();
+    void refreshBrandPixmaps();
     void applyPrivateInquiryFilter();
     void applyPrivateInquiryStatus(QListWidgetItem *item);
 
@@ -106,23 +127,24 @@ private:
     QString refreshToken;
     QString titleFontFamily;
     bool localTestMode = false;
-    QString loadedCode;
-    QString publicSelectedCode;
-    QString privateSelectedCode;
+    bool screenTransitionInProgress = false;
+    struct InquiryEditor {
+        QString code;
+        quint64 revision = 0;
+        bool loaded = false;
+    };
+    InquiryEditor publicInquiry;
+    InquiryEditor privateInquiry;
     QHash<QString, QString> publicStatusByCode;
     QPixmap loginLogoPixmap;
-    QPixmap loginTitlePixmap;
-    QPixmap compactTitlePixmap;
-    bool publicLoaded = false;
-    bool privateLoaded = false;
-    bool publicExists = false;
-    bool privateExists = false;
-    bool savingPublic = false;
-    bool savingPrivate = false;
+    QImage logoImage;
+    int loginTitleSize = 0;
+    bool savingInquiry = false;
+    bool invoiceUploadInProgress = false;
+    QMargins baseCentralMargins;
     QString pendingCode;
-    QJsonObject selectedPendingData;
     QString selectedPendingReceivedAt;
-    bool promotingPublicDone = false;
-    bool promotingPrivateDone = false;
+    QString selectedPendingUpdateTime;
+    quint64 pendingRecordRevision = 0;
 };
 #endif

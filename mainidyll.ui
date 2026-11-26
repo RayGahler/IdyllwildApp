@@ -5,29 +5,42 @@
   <property name="geometry">
    <rect><x>0</x><y>0</y><width>900</width><height>720</height></rect>
   </property>
-  <property name="windowTitle"><string>Idyllwild Admin Repair Inquiry Forum</string></property>
+  <property name="windowTitle"><string>Admin Inquiry Firebase Panel</string></property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="mainLayout">
-    <item alignment="Qt::AlignHCenter">
-     <widget class="QWidget" name="loginBrandContainer">
-      <layout class="QVBoxLayout" name="loginBrandLayout">
-       <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>300</width><height>300</height></size></property><property name="maximumSize"><size><width>300</width><height>300</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
-       <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN REPAIR INQUIRY FORUM</string></property><property name="minimumSize"><size><width>820</width><height>90</height></size></property><property name="maximumSize"><size><width>820</width><height>90</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
-      </layout>
-     </widget>
-    </item>
-    <item alignment="Qt::AlignHCenter">
-     <widget class="QGroupBox" name="signInGroup">
-      <property name="title"><string>Admin sign in</string></property>
-      <property name="maximumSize"><size><width>500</width><height>16777215</height></size></property>
-      <layout class="QVBoxLayout" name="signInLayout">
-       <item><widget class="QLineEdit" name="emailEdit"><property name="placeholderText"><string>Admin email</string></property></widget></item>
-       <item><widget class="QLineEdit" name="passwordEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Password</string></property></widget></item>
-       <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
-      </layout>
-     </widget>
-    </item>
     <item>
+     <widget class="QStackedWidget" name="screenStack">
+      <widget class="QWidget" name="loginPage">
+       <layout class="QVBoxLayout" name="loginLayout">
+        <property name="leftMargin"><number>0</number></property>
+        <property name="topMargin"><number>0</number></property>
+        <property name="rightMargin"><number>0</number></property>
+        <property name="bottomMargin"><number>0</number></property>
+        <item alignment="Qt::AlignHCenter">
+         <widget class="QWidget" name="loginBrandContainer">
+          <layout class="QVBoxLayout" name="loginBrandLayout">
+           <property name="sizeConstraint"><enum>QLayout::SetFixedSize</enum></property>
+           <property name="spacing"><number>20</number></property>
+           <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>240</width><height>240</height></size></property><property name="maximumSize"><size><width>240</width><height>240</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+           <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN INQUIRY FIREBASE PANEL</string></property><property name="minimumSize"><size><width>740</width><height>90</height></size></property><property name="maximumSize"><size><width>740</width><height>90</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item alignment="Qt::AlignHCenter">
+         <widget class="QGroupBox" name="signInGroup">
+          <property name="title"><string>Admin sign in</string></property>
+          <property name="maximumSize"><size><width>500</width><height>16777215</height></size></property>
+          <layout class="QVBoxLayout" name="signInLayout">
+           <item><widget class="QLineEdit" name="emailEdit"><property name="placeholderText"><string>Admin email</string></property></widget></item>
+           <item><widget class="QLineEdit" name="passwordEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property><property name="placeholderText"><string>Password</string></property></widget></item>
+           <item alignment="Qt::AlignHCenter"><widget class="QPushButton" name="signInButton"><property name="text"><string>Sign in</string></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item><widget class="QLabel" name="websiteLabel"><property name="text"><string>&lt;a href="https://www.idyllwildelectronics.com/"&gt;&lt;span style="color:#A7D5A8"&gt;www.idyllwildelectronics.com&lt;/span&gt;&lt;/a&gt;</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="openExternalLinks"><bool>true</bool></property></widget></item>
+        <item><widget class="QLabel" name="copyrightLabel"><property name="text"><string>© 2026-2027 Idyllwild Electronic Repair LLC &amp; Ray Gahler. All Rights Reserved</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+       </layout>
+      </widget>
      <widget class="QScrollArea" name="workspaceWidget">
       <property name="widgetResizable"><bool>true</bool></property>
       <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
@@ -37,21 +50,44 @@
         <item>
          <widget class="QFrame" name="mainBrandContainer">
           <property name="styleSheet"><string notr="true">QFrame#mainBrandContainer { background: transparent; border: none; }</string></property>
-          <property name="sizePolicy"><sizepolicy hsizetype="Maximum" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
-          <property name="maximumSize"><size><width>860</width><height>86</height></size></property>
-          <layout class="QHBoxLayout" name="mainBrandLayout">
-           <property name="leftMargin"><number>10</number></property>
-           <property name="topMargin"><number>5</number></property>
-           <property name="rightMargin"><number>10</number></property>
-           <property name="bottomMargin"><number>5</number></property>
-           <item><widget class="QLabel" name="mainLogoLabel"><property name="minimumSize"><size><width>70</width><height>70</height></size></property><property name="maximumSize"><size><width>70</width><height>70</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
-           <item><widget class="QLabel" name="mainTitleLabel"><property name="text"><string>ADMIN REPAIR INQUIRY FORUM</string></property><property name="minimumSize"><size><width>620</width><height>70</height></size></property><property name="maximumSize"><size><width>620</width><height>70</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
+          <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+          <layout class="QGridLayout" name="mainBrandLayout" columnstretch="0,1">
+           <property name="leftMargin"><number>8</number></property>
+           <property name="topMargin"><number>8</number></property>
+           <property name="rightMargin"><number>8</number></property>
+           <property name="bottomMargin"><number>8</number></property>
+           <property name="horizontalSpacing"><number>20</number></property>
+           <property name="verticalSpacing"><number>8</number></property>
+           <item row="0" column="0" rowspan="2" alignment="Qt::AlignTop"><widget class="QLabel" name="mainLogoLabel"><property name="minimumSize"><size><width>88</width><height>88</height></size></property><property name="maximumSize"><size><width>88</width><height>88</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
+           <item row="0" column="1">
+            <layout class="QHBoxLayout" name="accountLayout">
+             <item><spacer name="accountSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+             <item alignment="Qt::AlignVCenter"><widget class="QLabel" name="greetingLabel">
+              <property name="alignment"><set>Qt::AlignCenter</set></property>
+              <property name="styleSheet"><string notr="true">QLabel#greetingLabel { color: #E8EFE9; background: #1F3D2B; border: 1px solid #3F6248; border-radius: 14px; padding: 7px 12px; font-weight: 600; }</string></property>
+             </widget></item>
+             <item alignment="Qt::AlignVCenter"><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign Out</string></property></widget></item>
+            </layout>
+           </item>
+           <item row="1" column="1" alignment="Qt::AlignLeft"><widget class="QLabel" name="mainTitleLabel"><property name="text"><string>ADMIN INQUIRY FIREBASE PANEL</string></property><property name="minimumSize"><size><width>620</width><height>70</height></size></property><property name="maximumSize"><size><width>620</width><height>70</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
           </layout>
          </widget>
         </item>
        <item>
      <layout class="QHBoxLayout" name="lookupLayout">
-      <item><widget class="QLabel" name="codeLabel"><property name="text"><string>Inquiry code</string></property></widget></item>
+      <item>
+       <widget class="QWidget" name="inquiryCodeActions">
+        <layout class="QVBoxLayout" name="inquiryCodeActionsLayout">
+         <property name="spacing"><number>5</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item><widget class="QLabel" name="codeLabel"><property name="text"><string>Inquiry code</string></property></widget></item>
+         <item alignment="Qt::AlignLeft"><widget class="QPushButton" name="createInquiryButton"><property name="minimumSize"><size><width>142</width><height>0</height></size></property><property name="text"><string>Create inquiry</string></property></widget></item>
+        </layout>
+       </widget>
+      </item>
       <item><widget class="QLineEdit" name="codeEdit"><property name="placeholderText"><string>IDY-ABC123</string></property></widget></item>
       <item><widget class="QPushButton" name="loadButton"><property name="text"><string>Load inquiry</string></property></widget></item>
       <item><widget class="QPushButton" name="deleteInquiryButton">
@@ -66,17 +102,36 @@
        <property name="orientation"><enum>Qt::Horizontal</enum></property>
        <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
       </spacer></item>
-      <item><widget class="QPushButton" name="createInquiryButton">
-       <property name="text"><string>Create inquiry</string></property>
-      </widget></item>
-      <item><widget class="QPushButton" name="createContactButton">
-       <property name="enabled"><bool>false</bool></property>
-       <property name="text"><string>Create contact</string></property>
-      </widget></item>
-      <item><widget class="QPushButton" name="scheduleRepairButton">
-       <property name="enabled"><bool>false</bool></property>
-       <property name="text"><string>Schedule repair</string></property>
-      </widget></item>
+      <item>
+       <widget class="QWidget" name="repairActionsContainer">
+        <layout class="QVBoxLayout" name="repairActionsLayout">
+         <property name="spacing"><number>5</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <layout class="QHBoxLayout" name="repairActionButtons">
+           <item><widget class="QPushButton" name="createContactButton">
+            <property name="enabled"><bool>false</bool></property>
+            <property name="text"><string>Create contact</string></property>
+           </widget></item>
+           <item><widget class="QPushButton" name="scheduleRepairButton">
+            <property name="enabled"><bool>false</bool></property>
+            <property name="text"><string>Schedule repair</string></property>
+           </widget></item>
+           <item><widget class="QPushButton" name="createInvoiceButton"><property name="enabled"><bool>false</bool></property><property name="text"><string>Create PDF</string></property></widget></item>
+           <item><widget class="QPushButton" name="uploadInvoiceButton"><property name="enabled"><bool>false</bool></property><property name="text"><string>Publish invoice PDF</string></property></widget></item>
+          </layout>
+         </item>
+         <item alignment="Qt::AlignRight"><widget class="QPushButton" name="permanentlyDeleteButton">
+          <property name="enabled"><bool>false</bool></property>
+          <property name="toolTip"><string>Permanently delete the selected archived inquiry</string></property>
+          <property name="text"><string>Perm Delete</string></property>
+         </widget></item>
+        </layout>
+       </widget>
+      </item>
      </layout>
     </item>
        <item>
@@ -165,7 +220,12 @@
           </item>
          </layout>
         </item>
-        <item alignment="Qt::AlignRight"><widget class="QPushButton" name="saveButton"><property name="text"><string>Save changes</string></property></widget></item>
+        <item>
+         <layout class="QHBoxLayout" name="publicRecordActions">
+          <item><spacer name="publicRecordActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+          <item><widget class="QPushButton" name="saveButton"><property name="text"><string>Save changes</string></property></widget></item>
+         </layout>
+        </item>
        </layout>
       </widget>
       <widget class="QWidget" name="privateTab">
@@ -203,7 +263,12 @@
           </item>
          </layout>
         </item>
-        <item alignment="Qt::AlignRight"><widget class="QPushButton" name="savePrivateButton"><property name="text"><string>Save changes</string></property></widget></item>
+        <item>
+         <layout class="QHBoxLayout" name="privateRecordActions">
+          <item><spacer name="privateRecordActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+          <item><widget class="QPushButton" name="savePrivateButton"><property name="text"><string>Save changes</string></property></widget></item>
+         </layout>
+        </item>
        </layout>
       </widget>
       <widget class="QWidget" name="deletedTab">
@@ -212,10 +277,6 @@
         <item>
          <layout class="QHBoxLayout" name="deletedToolbar">
           <item><widget class="QPushButton" name="refreshDeletedButton"><property name="text"><string>Refresh list</string></property></widget></item>
-          <item><widget class="QPushButton" name="permanentlyDeleteButton">
-           <property name="enabled"><bool>false</bool></property>
-           <property name="text"><string>Permanently delete</string></property>
-          </widget></item>
           <item><widget class="QLabel" name="deletedListStatus"><property name="text"><string/></property></widget></item>
          </layout>
         </item>
@@ -236,18 +297,9 @@
        </layout>
       </widget>
      </widget>
+     </widget>
     </item>
-    <item><widget class="QLabel" name="websiteLabel"><property name="text"><string>&lt;a href="https://www.idyllwildelectronics.com/"&gt;&lt;span style="color:#A7D5A8"&gt;www.idyllwildelectronics.com&lt;/span&gt;&lt;/a&gt;</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="openExternalLinks"><bool>true</bool></property></widget></item>
-    <item><widget class="QLabel" name="copyrightLabel"><property name="text"><string>© 2026-2027 Idyllwild Electronic Repair LLC &amp; Ray Gahler. All Rights Reserved</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
    </layout>
-   <widget class="QPushButton" name="signOutButton">
-    <property name="text"><string>Sign Out</string></property>
-   </widget>
-   <widget class="QLabel" name="greetingLabel">
-    <property name="text"><string/></property>
-    <property name="alignment"><set>Qt::AlignCenter</set></property>
-    <property name="styleSheet"><string notr="true">QLabel#greetingLabel { color: #E8EFE9; background: #1F3D2B; border: 1px solid #3F6248; border-radius: 14px; padding: 7px 12px; font-weight: 600; }</string></property>
-   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>

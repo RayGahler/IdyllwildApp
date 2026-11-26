@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
     <key>CFBundleName</key>
-    <string>Idyllwild A.R.I.F</string>
+    <string>ADMIN INQUIRY FIREBASE PANEL</string>
     <key>CFBundleDisplayName</key>
-    <string>Idyllwild A.R.I.F</string>
+    <string>ADMIN INQUIRY FIREBASE PANEL</string>
     <key>CFBundleIconFile</key>
     <string>IdyllwildApp.icns</string>
     <key>CFBundlePackageType</key>

@@ -13,11 +13,11 @@
 #include <QTabBar>
 #include <QUrlQuery>
 
-#include <memory>
 #include <utility>
 
 using Firestore::firestoreError;
 using Firestore::firestoreFields;
+using Firestore::documentsPath;
 using Firestore::inquiryCollectionUrl;
 using Firestore::inquiryUrl;
 using Firestore::isNotFound;
@@ -44,6 +44,7 @@ void MainIdyll::loadPendingPage(bool background, const QString &pageToken, QJson
         url.setQuery(query);
     }
     QNetworkRequest request(url);
+    request.setTransferTimeout(15000);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     const auto session = sessionGeneration;
     const auto revision = pendingListRevision;
@@ -124,12 +125,7 @@ void MainIdyll::applyPendingList(const QJsonArray &documents)
     if (list->currentItem() != selected || (selected && !selected->isSelected()))
         list->setCurrentItem(selected);
     if (!pendingCode.isEmpty() && !currentIds.contains(pendingCode)) {
-        pendingCode.clear();
-        selectedPendingData = {};
-        selectedPendingReceivedAt.clear();
-        ui->pendingSelectedCodeLabel->setText(tr("None"));
-        setPendingFieldsEnabled(false);
-        ui->promotePendingButton->setEnabled(false);
+        clearPendingEditor();
     }
 
     unreadPendingIds.intersect(currentIds);
@@ -165,63 +161,78 @@ void MainIdyll::setPendingFieldsEnabled(bool enabled)
         field->setEnabled(enabled);
 }
 
-void MainIdyll::loadPendingInquiry(const QString &displayCode)
+void MainIdyll::clearPendingEditor()
 {
+    ++pendingRecordRevision;
+    pendingCode.clear();
+    selectedPendingUpdateTime.clear();
+    selectedPendingReceivedAt.clear();
+    ui->pendingSelectedCodeLabel->setText(tr("None"));
+    populatePendingEditor({});
+    setPendingFieldsEnabled(false);
+    ui->promotePendingButton->setEnabled(false);
+}
+
+void MainIdyll::populatePendingEditor(const QJsonObject &fields)
+{
+    ui->pendingNameEdit->setText(readStringField(fields, "name"));
+    ui->pendingPhoneEdit->setText(readStringField(fields, "phone"));
+    ui->pendingEmailEdit->setText(readStringField(fields, "email"));
+    ui->pendingDeviceEdit->setText(readStringField(fields, "device"));
+    ui->pendingModelEdit->setText(readStringField(fields, "model"));
+    ui->pendingProblemEdit->setPlainText(readStringField(fields, "problem"));
+    ui->pendingAddressEdit->setPlainText(readStringField(fields, "address"));
+    ui->pendingMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
+    setPreferredContact(*ui->pendingPreferredEdit, readStringField(fields, "preferredContact"));
+    QString status = readStringField(fields, "status");
+    if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
+        status = QStringLiteral("Recieved");
+    const int index = ui->pendingStatusEdit->findText(status, Qt::MatchFixedString);
+    ui->pendingStatusEdit->setCurrentIndex(qMax(0, index));
+}
+
+void MainIdyll::loadPendingInquiry()
+{
+    clearPendingEditor();
     const auto *item = ui->pendingList->currentItem();
     if (!item || idToken.isEmpty())
         return;
+
     pendingCode = item->data(Qt::UserRole).toString();
-    if (pendingCode.isEmpty())
-        pendingCode = displayCode;
-    setPendingFieldsEnabled(false);
-    ui->promotePendingButton->setEnabled(false);
+    ui->pendingSelectedCodeLabel->setText(item->text());
     QNetworkRequest request(inquiryUrl("pendingInquiries", pendingCode));
+    request.setTransferTimeout(15000);
     request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
     const auto session = sessionGeneration;
-    const QString code = pendingCode;
+    const auto revision = pendingRecordRevision;
     auto *reply = network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, displayCode, session, code] {
-        if (session != sessionGeneration || code != pendingCode) {
-            reply->deleteLater();
-            return;
-        }
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        if (isNotFound(reply, response)) {
-            showError(QStringLiteral("That pending inquiry no longer exists. Refresh the list."));
-            setPendingFieldsEnabled(false);
-            ui->promotePendingButton->setEnabled(false);
-            reply->deleteLater();
-            return;
-        }
-        if (reply->error() != QNetworkReply::NoError) {
-            showError(response.value("error").toObject().value("message").toString(reply->errorString()));
-            reply->deleteLater();
-            return;
-        }
-        selectedPendingData = response.value("fields").toObject();
-        selectedPendingReceivedAt = Firestore::inquiryReceivedAt(response).toUTC().toString(Qt::ISODateWithMs);
-        ui->pendingSelectedCodeLabel->setText(displayCode);
-        ui->pendingNameEdit->setText(readStringField(selectedPendingData, "name"));
-        ui->pendingPhoneEdit->setText(readStringField(selectedPendingData, "phone"));
-        ui->pendingEmailEdit->setText(readStringField(selectedPendingData, "email"));
-        ui->pendingDeviceEdit->setText(readStringField(selectedPendingData, "device"));
-        ui->pendingModelEdit->setText(readStringField(selectedPendingData, "model"));
-        QString status = readStringField(selectedPendingData, "status");
-        if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
-            status = QStringLiteral("Recieved");
-        int statusIndex = ui->pendingStatusEdit->findText(status, Qt::MatchFixedString);
-        ui->pendingStatusEdit->setCurrentIndex(statusIndex < 0 ? 0 : statusIndex);
-        ui->pendingProblemEdit->setPlainText(readStringField(selectedPendingData, "problem"));
-        setPreferredContact(*ui->pendingPreferredEdit, readStringField(selectedPendingData, "preferredContact"));
-        setPendingFieldsEnabled(true);
-        ui->promotePendingButton->setEnabled(true);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, revision] {
         reply->deleteLater();
+        if (session != sessionGeneration || revision != pendingRecordRevision)
+            return;
+
+        const auto document = QJsonDocument::fromJson(reply->readAll()).object();
+        if (isNotFound(reply, document)) {
+            showError(tr("That pending inquiry no longer exists. Refresh the list."));
+            return;
+        }
+        const auto error = document.value("error").toObject();
+        if (reply->error() != QNetworkReply::NoError || !error.isEmpty()) {
+            showError(firestoreError(error, reply->errorString()));
+            return;
+        }
+        selectedPendingUpdateTime = document.value("updateTime").toString();
+        selectedPendingReceivedAt = Firestore::inquiryReceivedAt(document).toUTC().toString(Qt::ISODateWithMs);
+        populatePendingEditor(document.value("fields").toObject());
+        setPendingFieldsEnabled(true);
+        ui->promotePendingButton->setEnabled(!selectedPendingUpdateTime.isEmpty());
     });
 }
 
 void MainIdyll::promotePendingInquiry()
 {
-    if (pendingCode.isEmpty() || selectedPendingData.isEmpty())
+    if (idToken.isEmpty() || pendingCode.isEmpty() || selectedPendingUpdateTime.isEmpty()
+        || !ui->promotePendingButton->isEnabled())
         return;
     const QString device = ui->pendingDeviceEdit->text().trimmed();
     const QString model = ui->pendingModelEdit->text().trimmed();
@@ -238,8 +249,6 @@ void MainIdyll::promotePendingInquiry()
     ui->pendingList->setEnabled(false);
     updatePendingDeleteButton();
     ui->statusbar->showMessage(QStringLiteral("Pushing pending inquiry…"));
-    promotingPublicDone = false;
-    promotingPrivateDone = false;
 
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
     const QJsonObject publicData{
@@ -261,75 +270,43 @@ void MainIdyll::promotePendingInquiry()
         {"address", ui->pendingAddressEdit->toPlainText().trimmed()}
     };
 
+    const QString code = pendingCode;
     const auto session = sessionGeneration;
-    auto remaining = std::make_shared<int>(2);
-    auto createDocument = [this, now, session, remaining](const QString &collection, QJsonObject data, bool isPublic) {
-        QUrl url = inquiryCollectionUrl(collection);
-        QUrlQuery query;
-        query.addQueryItem("documentId", pendingCode);
-        url.setQuery(query);
-        QJsonObject fields = firestoreFields(data);
+    const auto acceptedFields = [this, &now](const QJsonObject &data) {
+        auto fields = firestoreFields(data);
         fields.insert("createdAt", QJsonObject{{"timestampValue", now}});
         if (!selectedPendingReceivedAt.isEmpty())
             fields.insert("receivedAt", QJsonObject{{"timestampValue", selectedPendingReceivedAt}});
         fields.insert("updatedAt", QJsonObject{{"timestampValue", now}});
-        QNetworkRequest request(url);
-        request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-        auto *reply = network.sendCustomRequest(
-            request, "POST", QJsonDocument(QJsonObject{{"fields", fields}}).toJson());
-        connect(reply, &QNetworkReply::finished, this, [this, reply, isPublic, session, remaining] {
-            reply->deleteLater();
-            if (session != sessionGeneration)
-                return;
-            const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-            if (reply->error() != QNetworkReply::NoError) {
-                showError(QStringLiteral("Could not create %1 inquiry: %2")
-                              .arg(isPublic ? QStringLiteral("public") : QStringLiteral("private"),
-                                   response.value("error").toObject().value("message").toString(
-                                       reply->errorString())));
-            } else if (isPublic) {
-                promotingPublicDone = true;
-            } else {
-                promotingPrivateDone = true;
-            }
-            if (--*remaining != 0)
-                return;
-            if (promotingPublicDone && promotingPrivateDone) {
-                finishPendingPromotion();
-            } else {
-                ui->refreshPendingButton->setEnabled(true);
-                ui->pendingList->setEnabled(true);
-                updatePendingDeleteButton();
-            }
-        });
+        return fields;
     };
-    createDocument("publicInquiries", publicData, true);
-    createDocument("privateInquiries", privateData, false);
-}
-
-void MainIdyll::finishPendingPromotion()
-{
-    const auto session = sessionGeneration;
-    const QString code = pendingCode;
-    QNetworkRequest request(inquiryUrl("pendingInquiries", code));
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    auto *reply = network.sendCustomRequest(request, "DELETE");
+    auto *reply = Firestore::commitWrites(network, idToken, {
+        Firestore::createInquiryWrite(QStringLiteral("publicInquiries"), code, acceptedFields(publicData)),
+        Firestore::createInquiryWrite(QStringLiteral("privateInquiries"), code, acceptedFields(privateData)),
+        QJsonObject{
+            {"delete", QStringLiteral("%1/pendingInquiries/%2").arg(documentsPath(), code)},
+            {"currentDocument", QJsonObject{{"updateTime", selectedPendingUpdateTime}}}
+        }
+    });
     connect(reply, &QNetworkReply::finished, this, [this, reply, session, code] {
         reply->deleteLater();
         if (session != sessionGeneration)
             return;
-        if (reply->error() != QNetworkReply::NoError) {
-            const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-            showError(QStringLiteral("Inquiry was copied, but pending record could not be removed: %1")
-                          .arg(response.value("error").toObject().value("message").toString(
-                              reply->errorString())));
-        } else {
-            ui->statusbar->showMessage(QStringLiteral("Inquiry pushed to public and private collections."));
-            removePendingInquiryFromList(code);
-        }
+
         ui->refreshPendingButton->setEnabled(true);
         ui->pendingList->setEnabled(true);
+        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
+        const auto error = response.value("error").toObject();
+        if (reply->error() != QNetworkReply::NoError || !error.isEmpty()) {
+            ui->promotePendingButton->setEnabled(pendingCode == code);
+            showError(tr("Could not accept inquiry %1. %2")
+                          .arg(code, firestoreError(error, reply->errorString())));
+        } else {
+            removePendingInquiryFromList(code);
+            refreshCollection(QStringLiteral("publicInquiries"));
+            refreshCollection(QStringLiteral("privateInquiries"));
+            ui->statusbar->showMessage(tr("Inquiry %1 accepted.").arg(code));
+        }
         updatePendingDeleteButton();
     });
 }
@@ -348,12 +325,7 @@ void MainIdyll::removePendingInquiryFromList(const QString &code)
         delete list->takeItem(row);
     }
     if (pendingCode == code) {
-        pendingCode.clear();
-        selectedPendingData = {};
-        selectedPendingReceivedAt.clear();
-        ui->pendingSelectedCodeLabel->setText(tr("None"));
-        setPendingFieldsEnabled(false);
-        ui->promotePendingButton->setEnabled(false);
+        clearPendingEditor();
     }
     knownPendingIds.remove(code);
     unreadPendingIds.remove(code);

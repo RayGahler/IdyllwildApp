@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 
 project(IdyllwildApp VERSION 0.1 LANGUAGES CXX)
 
+if(APPLE AND NOT IOS)
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -20,6 +24,9 @@ set(PROJECT_SOURCES
         session.cpp
         createinquiry.cpp
         repairexport.cpp
+        invoice.cpp
+        invoice.h
+        invoiceupload.cpp
         IdyllwildSync.h
         pendinginquiries.cpp
         inquiryrecords.cpp
@@ -31,6 +38,11 @@ set(PROJECT_SOURCES
         sounds.qrc
         branding.qrc
 )
+
+if(APPLE AND NOT IOS)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent)
+    list(APPEND PROJECT_SOURCES macosglass.mm macosinvoice.mm)
+endif()
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(IdyllwildApp
@@ -57,6 +69,11 @@ endif()
 
 target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Multimedia)
+
+if(APPLE AND NOT IOS)
+    target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Concurrent "-framework AppKit")
+    target_compile_options(IdyllwildApp PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+endif()
 
 target_compile_definitions(IdyllwildApp PRIVATE
     $<$<CONFIG:Debug>:IDYLLWILD_ENABLE_LOCAL_TEST_ACCOUNT>

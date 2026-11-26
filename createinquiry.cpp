@@ -11,13 +11,10 @@
 #include <QGroupBox>
 #include <QJsonDocument>
 #include <QMessageBox>
-#include <QNetworkRequest>
 #include <QRandomGenerator>
-#include <QUrlQuery>
 #include <QVBoxLayout>
 
 using Firestore::firestoreFields;
-using Firestore::inquiryCollectionUrl;
 
 void MainIdyll::openCreateInquiry()
 {
@@ -25,6 +22,9 @@ void MainIdyll::openCreateInquiry()
         return;
 
     QDialog dialog(this);
+    dialog.setWindowFlag(Qt::Dialog, true);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setModal(true);
     dialog.setWindowTitle(QStringLiteral("Create inquiry"));
     dialog.resize(560, 680);
     auto *layout = new QVBoxLayout(&dialog);
@@ -107,42 +107,31 @@ void MainIdyll::postNewInquiry(const QString &code, const QJsonObject &publicDat
 {
     const auto session = sessionGeneration;
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-    if (!publicExists && publicData.contains("inquiryCode")) {
-        // Preserve the current helper's create semantics for new inquiry documents.
-    }
-    auto postRecord = [this, &code, &now, session](const QString &collection, QJsonObject data,
-                                          const QString &label) {
+    const auto newFields = [&code, &now](QJsonObject data) {
         data.insert("inquiryCode", code);
         QJsonObject fields = firestoreFields(data);
         fields.insert("createdAt", QJsonObject{{"timestampValue", now}});
         fields.insert("updatedAt", QJsonObject{{"timestampValue", now}});
-        QUrl collectionUrl = inquiryCollectionUrl(collection);
-        QUrlQuery query;
-        query.addQueryItem("documentId", code);
-        collectionUrl.setQuery(query);
-        QNetworkRequest request(collectionUrl);
-        request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-        auto *reply = network.sendCustomRequest(
-            request, "POST", QJsonDocument(QJsonObject{{"fields", fields}}).toJson());
-        connect(reply, &QNetworkReply::finished, this, [this, reply, label, code, session] {
-            if (session != sessionGeneration) {
-                reply->deleteLater();
-                return;
-            }
-            const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-            if (reply->error() != QNetworkReply::NoError) {
-                showError(QStringLiteral("%1 record failed: %2").arg(
-                    label, response.value("error").toObject().value("message").toString(
-                        reply->errorString())));
-            } else {
-                ui->statusbar->showMessage(QStringLiteral("%1 record posted for %2.")
-                                               .arg(label, code));
-                ui->codeEdit->setText(code);
-            }
-            reply->deleteLater();
-        });
+        return fields;
     };
-    postRecord("publicInquiries", publicData, QStringLiteral("Public"));
-    postRecord("privateInquiries", privateData, QStringLiteral("Private"));
+
+    auto *reply = Firestore::commitWrites(network, idToken, {
+        Firestore::createInquiryWrite(QStringLiteral("publicInquiries"), code, newFields(publicData)),
+        Firestore::createInquiryWrite(QStringLiteral("privateInquiries"), code, newFields(privateData))
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, code, session] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
+            return;
+
+        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
+        if (reply->error() != QNetworkReply::NoError || response.contains("error")) {
+            showError(tr("Could not create inquiry %1. %2").arg(code, Firestore::firestoreError(
+                response.value("error").toObject(), reply->errorString())));
+            return;
+        }
+
+        ui->codeEdit->setText(code);
+        ui->statusbar->showMessage(tr("Inquiry %1 created.").arg(code));
+    });
 }

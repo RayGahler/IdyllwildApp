@@ -1,5 +1,7 @@
 #include "firestore.h"
 
+#include <QJsonDocument>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 
@@ -9,18 +11,42 @@ namespace Firestore {
 
 const QString projectId = QStringLiteral("idyllwild-e323e");
 
+QString documentsPath()
+{
+    return QStringLiteral("projects/%1/databases/(default)/documents").arg(projectId);
+}
+
+QJsonObject createInquiryWrite(const QString &collection, const QString &code,
+                               const QJsonObject &fields)
+{
+    const QString name = QStringLiteral("%1/%2/%3").arg(documentsPath(), collection, code);
+    return {
+        {"update", QJsonObject{{"name", name}, {"fields", fields}}},
+        {"currentDocument", QJsonObject{{"exists", false}}}
+    };
+}
+
+QNetworkReply *commitWrites(QNetworkAccessManager &network, const QString &idToken,
+                            const QJsonArray &writes)
+{
+    QNetworkRequest request(QUrl(QStringLiteral("https://firestore.googleapis.com/v1/%1:commit")
+                                     .arg(documentsPath())));
+    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setTransferTimeout(15000);
+    return network.post(request, QJsonDocument(QJsonObject{{"writes", writes}}).toJson(QJsonDocument::Compact));
+}
+
 QUrl inquiryUrl(const QString &collection, const QString &code)
 {
-    return QUrl(QStringLiteral(
-        "https://firestore.googleapis.com/v1/projects/%1/databases/(default)/documents/%2/%3")
-                    .arg(projectId, collection, QString::fromLatin1(QUrl::toPercentEncoding(code))));
+    return QUrl(QStringLiteral("https://firestore.googleapis.com/v1/%1/%2/%3")
+                    .arg(documentsPath(), collection, QString::fromLatin1(QUrl::toPercentEncoding(code))));
 }
 
 QUrl inquiryCollectionUrl(const QString &collection)
 {
-    return QUrl(QStringLiteral(
-        "https://firestore.googleapis.com/v1/projects/%1/databases/(default)/documents/%2")
-                    .arg(projectId, collection));
+    return QUrl(QStringLiteral("https://firestore.googleapis.com/v1/%1/%2")
+                    .arg(documentsPath(), collection));
 }
 
 QDateTime inquiryReceivedAt(const QJsonObject &document)
