@@ -5,7 +5,7 @@
   <property name="geometry">
    <rect><x>0</x><y>0</y><width>900</width><height>720</height></rect>
   </property>
-  <property name="windowTitle"><string>Admin Inquiry Firebase Panel</string></property>
+  <property name="windowTitle"><string>Business Management &amp; Inquiry App</string></property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="mainLayout">
     <item>
@@ -22,7 +22,7 @@
            <property name="sizeConstraint"><enum>QLayout::SetFixedSize</enum></property>
            <property name="spacing"><number>20</number></property>
            <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="businessLogoLabel"><property name="minimumSize"><size><width>240</width><height>240</height></size></property><property name="maximumSize"><size><width>240</width><height>240</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
-           <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>ADMIN INQUIRY FIREBASE PANEL</string></property><property name="minimumSize"><size><width>740</width><height>90</height></size></property><property name="maximumSize"><size><width>740</width><height>90</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
+           <item alignment="Qt::AlignHCenter"><widget class="QLabel" name="panelTitleLabel"><property name="text"><string>Business Management &amp; Inquiry App</string></property><property name="minimumSize"><size><width>740</width><height>90</height></size></property><property name="maximumSize"><size><width>740</width><height>90</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: transparent; border: none;</string></property></widget></item>
           </layout>
          </widget>
         </item>
@@ -69,7 +69,7 @@
              <item alignment="Qt::AlignVCenter"><widget class="QPushButton" name="signOutButton"><property name="text"><string>Sign Out</string></property></widget></item>
             </layout>
            </item>
-           <item row="1" column="1" alignment="Qt::AlignLeft"><widget class="QLabel" name="mainTitleLabel"><property name="text"><string>ADMIN INQUIRY FIREBASE PANEL</string></property><property name="minimumSize"><size><width>620</width><height>70</height></size></property><property name="maximumSize"><size><width>620</width><height>70</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
+           <item row="1" column="1" alignment="Qt::AlignLeft"><widget class="QLabel" name="mainTitleLabel"><property name="text"><string>Business Management &amp; Inquiry App</string></property><property name="minimumSize"><size><width>620</width><height>70</height></size></property><property name="maximumSize"><size><width>620</width><height>70</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="styleSheet"><string notr="true">background: rgba(16, 28, 21, 190); border: 1px solid rgba(141, 168, 140, 190); border-radius: 12px;</string></property></widget></item>
           </layout>
          </widget>
         </item>

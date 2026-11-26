@@ -42,7 +42,7 @@ namespace {
 const QUrl defaultPendingSound(QStringLiteral("qrc:/sounds/pending-alert.wav"));
 const QString pendingSoundKey = QStringLiteral("notifications/pendingSound");
 const QString volumeKey = QStringLiteral("notifications/volume");
-const QString inquiryFormTitle = QStringLiteral("ADMIN INQUIRY FIREBASE PANEL");
+const QString inquiryFormTitle = QStringLiteral("Business Management & Inquiry App");
 
 void convertFormToCards(QFormLayout *form)
 {
@@ -129,17 +129,13 @@ void convertFormToCards(QFormLayout *form)
 struct FormTitle {
     FormTitle(const QString &family, qreal pointSize)
         : font(family, qRound(pointSize), QFont::Bold),
-          markFont(family, qMax(9, qRound(pointSize * 0.4)), QFont::Bold),
-          metrics(font), textWidth(metrics.horizontalAdvance(inquiryFormTitle)),
-          width(textWidth + 3 + QFontMetricsF(markFont).horizontalAdvance(QStringLiteral("TM")))
+          metrics(font), width(metrics.horizontalAdvance(inquiryFormTitle))
     {
         font.setStyleStrategy(QFont::PreferAntialias);
     }
 
     QFont font;
-    QFont markFont;
     QFontMetricsF metrics;
-    qreal textWidth;
     qreal width;
 };
 
@@ -161,10 +157,6 @@ void drawFormTitle(QPainter &painter, const QRectF &area, int pointSize, qsizety
         + title.metrics.ascent();
     QPainterPath lettering;
     lettering.addText(QPointF(left, baseline), title.font, inquiryFormTitle.left(visibleCharacters));
-    if (visibleCharacters == inquiryFormTitle.size()) {
-        lettering.addText(QPointF(left + title.textWidth + 3, baseline - title.metrics.ascent() * 0.48),
-                          title.markFont, QStringLiteral("TM"));
-    }
     const QColor outline(QStringLiteral("#101C15"));
     painter.setPen(QPen(outline, 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(outline);
@@ -621,10 +613,11 @@ void MainIdyll::refreshBrandPixmaps()
     loginLogoPixmap = scaledLogo(ui->businessLogoLabel->size());
     renderLoginBrand(loginBrandAnimation.currentValue().toReal());
     ui->mainLogoLabel->setPixmap(scaledLogo(ui->mainLogoLabel->size() - QSize(14, 14)));
-    const int compactWidth = qCeil(FormTitle(BrandStyle::titleFontFamily(), 32).width) + 16;
+    const int compactPointSize = qMin(32, loginFormTitlePointSize(BrandStyle::titleFontFamily(), QSize(600, 68)));
+    const int compactWidth = qCeil(FormTitle(BrandStyle::titleFontFamily(), compactPointSize).width) + 16;
     const QSize compactSize(compactWidth, 68);
     ui->mainTitleLabel->setFixedSize(compactSize + QSize(2, 2));
-    ui->mainTitleLabel->setPixmap(renderFormTitle(compactSize, ratio, 32));
+    ui->mainTitleLabel->setPixmap(renderFormTitle(compactSize, ratio, compactPointSize));
 }
 
 void MainIdyll::renderLoginBrand(qreal progress)

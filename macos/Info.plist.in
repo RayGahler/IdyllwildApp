@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
     <key>CFBundleName</key>
-    <string>ADMIN INQUIRY FIREBASE PANEL</string>
+    <string>Business Management &amp; Inquiry App</string>
     <key>CFBundleDisplayName</key>
-    <string>ADMIN INQUIRY FIREBASE PANEL</string>
+    <string>Business Management &amp; Inquiry App</string>
     <key>CFBundleIconFile</key>
     <string>IdyllwildApp.icns</string>
     <key>CFBundlePackageType</key>
