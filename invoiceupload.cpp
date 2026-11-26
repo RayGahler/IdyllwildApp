@@ -1,6 +1,8 @@
 #include "mainidyll.h"
+#include "repairstatus.h"
 #include "firestore.h"
 #include "invoice.h"
+#include "squarepayments.h"
 
 #include <ui_mainidyll.h>
 
@@ -9,6 +11,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
+#include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
@@ -18,6 +21,8 @@
 #include <QStandardPaths>
 #include <QRegularExpression>
 #include <QUrlQuery>
+#include <QUuid>
+#include <QtMath>
 
 #ifdef Q_OS_MACOS
 #include <QFutureWatcher>
@@ -40,15 +45,6 @@ QString localInvoiceDirectory(const QString &code)
         .filePath(QStringLiteral("Idyllwild Invoices/%1").arg(safeInvoiceName(code)));
 }
 
-QUrl websiteInvoiceUrl(const QString &inquiryCode, const QString &invoiceNumber)
-{
-    QUrl url(QStringLiteral("https://idyllwildelectronics.com/invoice%1/")
-                 .arg(QString::fromLatin1(QUrl::toPercentEncoding(invoiceNumber))));
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("code"), inquiryCode);
-    url.setQuery(query);
-    return url;
-}
 } // namespace
 
 void MainIdyll::openInvoiceMaker()
@@ -108,7 +104,7 @@ void MainIdyll::openInvoiceMaker()
             return;
         }
         QDesktopServices::openUrl(QUrl::fromLocalFile(localInvoicePath));
-        publishInvoicePdf(code, invoice.number, invoice.pdf);
+        publishInvoicePdf(code, invoice.number, invoice.pdf, invoice.amountDueCents);
     });
 }
 
@@ -137,7 +133,7 @@ void MainIdyll::publishExistingInvoice()
 }
 
 void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &invoiceNumber,
-                                 const QByteArray &pdfBytes)
+                                 const QByteArray &pdfBytes, std::optional<qint64> amountDue)
 {
     if (idToken.isEmpty() || localTestMode || invoiceUploadInProgress)
         return;
@@ -147,6 +143,12 @@ void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &inv
     }
 
 #ifdef Q_OS_MACOS
+    if (amountDue.value_or(0) > 0 && !Square::savedCredentials().isConfigured()) {
+        QMessageBox::information(this, tr("Connect Square"),
+            tr("The PDF is saved locally. Connect your Square account from Preferences → Square payments, "
+               "then use Publish invoice PDF to share it."));
+        return;
+    }
     invoiceUploadInProgress = true;
     updateInvoiceButtons();
     ui->statusbar->showMessage(tr("Syncing the invoice PDF for %1 to iCloud Drive…").arg(inquiryCode));
@@ -154,7 +156,7 @@ void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &inv
     const auto session = sessionGeneration;
     auto *watcher = new QFutureWatcher<ICloudInvoiceLink>(this);
     connect(watcher, &QFutureWatcher<ICloudInvoiceLink>::finished, this,
-            [this, watcher, session, inquiryCode, safeNumber] {
+            [this, watcher, session, inquiryCode, safeNumber, amountDue] {
         const auto link = watcher->result();
         watcher->deleteLater();
         if (session != sessionGeneration)
@@ -176,67 +178,196 @@ void MainIdyll::publishInvoicePdf(const QString &inquiryCode, const QString &inv
                 link.error.isEmpty() ? tr("iCloud did not return a valid download link.") : link.error);
             return;
         }
-        saveInvoiceLink(inquiryCode, safeNumber, link.url, link.expiresAt);
+        saveInvoiceLink(inquiryCode, safeNumber, link.url, link.expiresAt, amountDue);
     });
     watcher->setFuture(QtConcurrent::run(publishMacInvoice, safeInvoiceName(inquiryCode), safeNumber, pdfBytes));
 #else
     Q_UNUSED(inquiryCode);
     Q_UNUSED(invoiceNumber);
+    Q_UNUSED(amountDue);
     showError(tr("Publish the PDF from IdyllwildApp on a Mac with iCloud Drive enabled."));
 #endif
 }
 
-void MainIdyll::saveInvoiceLink(const QString &inquiryCode, const QString &invoiceNumber,
-                                const QUrl &downloadUrl, const QDateTime &expiresAt)
+void MainIdyll::saveInvoiceLink(const QString &code, const QString &invoiceNumber,
+                                const QUrl &downloadUrl, const QDateTime &expiresAt,
+                                std::optional<qint64> amountDue)
 {
-    QUrl url = Firestore::inquiryUrl(QStringLiteral("publicInquiries"), inquiryCode);
-    const QJsonObject fields{
-        {QStringLiteral("invoiceICloudUrl"), Firestore::stringField(downloadUrl.toString(QUrl::FullyEncoded))},
-        {QStringLiteral("invoiceLinkExpiresAt"), QJsonObject{{QStringLiteral("timestampValue"),
-            expiresAt.toUTC().toString(Qt::ISODateWithMs)}}},
-        {QStringLiteral("invoiceUrl"), Firestore::stringField(
-             websiteInvoiceUrl(inquiryCode, invoiceNumber).toString(QUrl::FullyEncoded))},
-        {QStringLiteral("invoiceNumber"), Firestore::stringField(invoiceNumber)},
-        {QStringLiteral("invoiceUpdatedAt"), QJsonObject{{QStringLiteral("timestampValue"),
-            QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}}}
-    };
-    QUrlQuery query;
-    for (auto it = fields.constBegin(); it != fields.constEnd(); ++it)
-        query.addQueryItem(QStringLiteral("updateMask.fieldPaths"), it.key());
-    query.addQueryItem(QStringLiteral("currentDocument.exists"), QStringLiteral("true"));
-    url.setQuery(query);
-
-    QNetworkRequest request(url);
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setTransferTimeout(15000);
     const auto session = sessionGeneration;
-    auto *reply = network.sendCustomRequest(
-        request, "PATCH", QJsonDocument(QJsonObject{{QStringLiteral("fields"), fields}}).toJson());
+    auto *reply = network.get(Firestore::authorizedRequest(
+        Firestore::inquiryUrl(QStringLiteral("publicInquiries"), code), idToken));
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, session, inquiryCode, invoiceNumber, expiresAt] {
-        const auto response = QJsonDocument::fromJson(reply->readAll()).object();
-        const auto error = reply->error();
-        const QString fallback = reply->errorString();
+            [this, reply, session, code, invoiceNumber, downloadUrl, expiresAt, amountDue]() mutable {
         reply->deleteLater();
         if (session != sessionGeneration)
             return;
 
-        invoiceUploadInProgress = false;
-        updateInvoiceButtons();
-        if (error != QNetworkReply::NoError || response.contains(QStringLiteral("error"))) {
-            ui->statusbar->showMessage(tr("The invoice was not published."));
-            QMessageBox::warning(this, tr("Could not publish invoice"),
-                tr("The PDF is in iCloud Drive, but the website link could not be saved. %1 Try Publish invoice PDF again.")
-                    .arg(Firestore::firestoreError(
-                        response.value(QStringLiteral("error")).toObject(), fallback)));
+        const auto document = QJsonDocument::fromJson(reply->readAll()).object();
+        const QString updateTime = document.value("updateTime").toString();
+        if (reply->error() != QNetworkReply::NoError || updateTime.isEmpty()) {
+            reportInvoicePublicationError(tr("The repair record could not be loaded."));
             return;
         }
 
-        ui->statusbar->showMessage(tr("Invoice %1 is available for inquiry %2.")
-                                       .arg(invoiceNumber, inquiryCode));
-        QMessageBox::information(this, tr("Invoice published"),
-            tr("Customers can download invoice %1 by entering %2 on the repair status page. The link expires on %3.")
-                .arg(invoiceNumber, inquiryCode, QLocale().toString(expiresAt.toLocalTime().date(), QLocale::LongFormat)));
+        const auto previous = document.value("fields").toObject();
+        const QString previousId = Firestore::readStringField(previous, "invoicePaymentId");
+        const QString previousNumber = Firestore::readStringField(previous, "invoiceNumber");
+        const auto previousAmount = previous.value("invoiceAmountCents").toObject()
+                                        .value("integerValue").toString().toLongLong();
+        const auto url = Firestore::stringField(downloadUrl.toString(QUrl::FullyEncoded));
+        const QJsonObject expiration{{"timestampValue", expiresAt.toUTC().toString(Qt::ISODateWithMs)}};
+        const QJsonObject download{{"code", Firestore::stringField(code)}, {"url", url}, {"expiresAt", expiration}};
+        QJsonObject fields{
+            {"invoiceUrl", Firestore::stringField(customerInvoiceUrl(code, invoiceNumber).toString(QUrl::FullyEncoded))},
+            {"invoiceNumber", Firestore::stringField(invoiceNumber)},
+            {"invoiceUpdatedAt", QJsonObject{{"timestampValue", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}}}
+        };
+
+        if (!previousId.isEmpty() && previousNumber == invoiceNumber
+            && (!amountDue || *amountDue == previousAmount)) {
+            fields.insert("invoicePaymentId", Firestore::stringField(previousId));
+            const QJsonObject renewDownload{{"update", QJsonObject{
+                {"name", Firestore::documentsPath() + QStringLiteral("/invoiceDownloads/") + previousId},
+                {"fields", download}
+            }}};
+            finishInvoicePublication(code, invoiceNumber, expiresAt, updateTime, fields, {renewDownload});
+            return;
+        }
+
+        if (!amountDue && !previousId.isEmpty()) {
+            reportInvoicePublicationError(tr("Choose the PDF for invoice %1 to renew the existing payment link.")
+                                              .arg(previousNumber));
+            return;
+        }
+
+        if (!amountDue) {
+            bool confirmed = false;
+            const double dollars = QInputDialog::getDouble(this, tr("Invoice amount due"),
+                tr("Enter the amount due in this PDF in USD. Enter 0 if it has already been paid."),
+                0, 0, 999999.99, 2, &confirmed);
+            if (session != sessionGeneration)
+                return;
+            if (!confirmed) {
+                invoiceUploadInProgress = false;
+                updateInvoiceButtons();
+                ui->statusbar->showMessage(tr("Invoice publication canceled."));
+                return;
+            }
+            amountDue = qRound64(dollars * 100.0);
+        }
+
+        if (*amountDue == 0) {
+            if (!previousId.isEmpty()) {
+                reportInvoicePublicationError(tr("Use Review invoice payment to approve the existing payment."));
+                return;
+            }
+            fields.insert("invoiceICloudUrl", url);
+            fields.insert("invoiceLinkExpiresAt", expiration);
+            finishInvoicePublication(code, invoiceNumber, expiresAt, updateTime, fields);
+            return;
+        }
+
+        const auto credentials = Square::savedCredentials();
+        if (!credentials.isConfigured()) {
+            reportInvoicePublicationError(tr("Connect your Square account in Preferences → Square payments."));
+            return;
+        }
+
+        const QString paymentId = QUuid::createUuid().toString(QUuid::Id128);
+        const auto redirect = customerInvoiceUrl(code, invoiceNumber, QStringLiteral("card"));
+        const auto checkoutRequest = Square::checkoutPayload(credentials, paymentId, invoiceNumber, *amountDue, redirect);
+        auto *checkoutReply = network.post(Square::request(credentials, QStringLiteral("online-checkout/payment-links")),
+                                         QJsonDocument(checkoutRequest).toJson(QJsonDocument::Compact));
+        connect(checkoutReply, &QNetworkReply::finished, this,
+                [this, checkoutReply, session, paymentId, code, invoiceNumber, expiresAt, updateTime,
+                 amountCents = *amountDue, location = credentials.locationId, fields, previous, download]() mutable {
+            checkoutReply->deleteLater();
+            if (session != sessionGeneration)
+                return;
+
+            const auto result = QJsonDocument::fromJson(checkoutReply->readAll()).object();
+            const auto link = result.value("payment_link").toObject();
+            const QUrl url(link.value("url").toString());
+            const QString orderId = link.value("order_id").toString();
+            if (checkoutReply->error() != QNetworkReply::NoError || orderId.isEmpty() || !Square::isCheckoutUrl(url)) {
+                reportInvoicePublicationError(tr("Square could not create the checkout link. Check the Square connection and invoice amount."));
+                return;
+            }
+
+            const QJsonObject amount{{"integerValue", QString::number(amountCents)}};
+            fields.insert("invoicePaymentId", Firestore::stringField(paymentId));
+            fields.insert("invoiceAmountCents", amount);
+            const auto status = RepairStatus::normalized(Firestore::readStringField(previous, "status"));
+            if (status == RepairStatus::done || status == RepairStatus::readyForPickup)
+                fields.insert("status", Firestore::stringField(RepairStatus::readyForPickup));
+
+            const QJsonObject checkout{
+                {"code", Firestore::stringField(code)},
+                {"invoiceNumber", Firestore::stringField(invoiceNumber)},
+                {"amountCents", amount},
+                {"orderId", Firestore::stringField(orderId)},
+                {"locationId", Firestore::stringField(location)},
+                {"url", Firestore::stringField(url.toString(QUrl::FullyEncoded))}
+            };
+            finishInvoicePublication(code, invoiceNumber, expiresAt, updateTime, fields, {
+                Firestore::createInquiryWrite(QStringLiteral("invoiceSquareCheckouts"), paymentId, checkout),
+                Firestore::createInquiryWrite(QStringLiteral("invoiceDownloads"), paymentId, download)
+            });
+        });
     });
+}
+
+void MainIdyll::finishInvoicePublication(const QString &code, const QString &invoiceNumber,
+                                         const QDateTime &expiresAt, const QString &updateTime,
+                                         const QJsonObject &invoiceFields, const QJsonArray &extraWrites)
+{
+    QJsonArray mask;
+    for (auto it = invoiceFields.begin(); it != invoiceFields.end(); ++it)
+        mask.append(it.key());
+    if (invoiceFields.contains("invoicePaymentId")) {
+        // Masked fields absent from the write are removed from older public records.
+        mask.append(QStringLiteral("invoiceICloudUrl"));
+        mask.append(QStringLiteral("invoiceLinkExpiresAt"));
+    }
+
+    QJsonArray writes = extraWrites;
+    writes.append(QJsonObject{
+        {"update", QJsonObject{
+            {"name", Firestore::documentsPath() + QStringLiteral("/publicInquiries/") + code},
+            {"fields", invoiceFields}
+        }},
+        {"updateMask", QJsonObject{{"fieldPaths", mask}}},
+        {"currentDocument", QJsonObject{{"updateTime", updateTime}}}
+    });
+    auto *reply = Firestore::commitWrites(network, idToken, writes);
+    const auto session = sessionGeneration;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, session, code, invoiceNumber, expiresAt] {
+        reply->deleteLater();
+        if (session != sessionGeneration)
+            return;
+
+        if (reply->error() != QNetworkReply::NoError) {
+            const auto response = QJsonDocument::fromJson(reply->readAll()).object();
+            const QString error = Firestore::firestoreError(response.value("error").toObject(), reply->errorString());
+            reportInvoicePublicationError(tr("The website did not accept the invoice. Check staff access and whether a customer already chose a payment method. %1")
+                                             .arg(error));
+            return;
+        }
+
+        invoiceUploadInProgress = false;
+        updateInvoiceButtons();
+        refreshCollection(QStringLiteral("publicInquiries"));
+        ui->statusbar->showMessage(tr("Invoice %1 is available for inquiry %2.").arg(invoiceNumber, code));
+        QMessageBox::information(this, tr("Invoice published"),
+            tr("Customers can open invoice %1 from the repair status page with inquiry code %2. The PDF link expires on %3.")
+                .arg(invoiceNumber, code, QLocale().toString(expiresAt.date(), QLocale::LongFormat)));
+    });
+}
+
+void MainIdyll::reportInvoicePublicationError(const QString &message)
+{
+    invoiceUploadInProgress = false;
+    updateInvoiceButtons();
+    ui->statusbar->showMessage(tr("The invoice was not published."));
+    QMessageBox::warning(this, tr("Could not publish invoice"), message);
 }

@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "repairstatus.h"
 #include "preferredcontact.h"
 #include "firestore.h"
 
@@ -184,9 +185,7 @@ void MainIdyll::populatePendingEditor(const QJsonObject &fields)
     ui->pendingAddressEdit->setPlainText(readStringField(fields, "address"));
     ui->pendingMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
     setPreferredContact(*ui->pendingPreferredEdit, readStringField(fields, "preferredContact"));
-    QString status = readStringField(fields, "status");
-    if (status.compare(QStringLiteral("Received"), Qt::CaseInsensitive) == 0)
-        status = QStringLiteral("Recieved");
+    const QString status = RepairStatus::normalized(readStringField(fields, "status"));
     const int index = ui->pendingStatusEdit->findText(status, Qt::MatchFixedString);
     ui->pendingStatusEdit->setCurrentIndex(qMax(0, index));
 }

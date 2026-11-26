@@ -4,5 +4,6 @@
   <file alias="app-icon.png">branding/app-icon.png</file>
   <file alias="PricedownBl.otf">branding/PricedownBl.otf</file>
   <file alias="invoice-logo.png">branding/invoice-logo.png</file>
+  <file alias="invoice-signature.png">branding/invoice-signature.png</file>
  </qresource>
 </RCC>

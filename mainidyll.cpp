@@ -1,12 +1,12 @@
 #include "mainidyll.h"
+#include "repairstatus.h"
+#include "brandstyle.h"
 #include "preferredcontact.h"
 
 #include <ui_mainidyll.h>
 
 #include <QApplication>
 #include <QDateTime>
-#include <QDialog>
-#include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QFileDialog>
 #include <QGraphicsOpacityEffect>
@@ -22,7 +22,6 @@
 #include <QGridLayout>
 #include <QListWidget>
 #include <QPixmap>
-#include <QPointer>
 #include <QSequentialAnimationGroup>
 #include <QSettings>
 #include <QRegularExpression>
@@ -34,24 +33,16 @@
 #include <QWindow>
 #include <QHBoxLayout>
 #include <QTimer>
-#include <QVariantAnimation>
 #include <QtMath>
 
 #include <utility>
 #include <QUrl>
-
-#if defined(Q_OS_MACOS)
-void applyNativeLiquidGlass(QWidget *widget);
-#endif
 
 namespace {
 const QUrl defaultPendingSound(QStringLiteral("qrc:/sounds/pending-alert.wav"));
 const QString pendingSoundKey = QStringLiteral("notifications/pendingSound");
 const QString volumeKey = QStringLiteral("notifications/volume");
 const QString inquiryFormTitle = QStringLiteral("ADMIN INQUIRY FIREBASE PANEL");
-const QStringList publicStatuses{QStringLiteral("Recieved"), QStringLiteral("In Repair"),
-                                 QStringLiteral("Done!"), QStringLiteral("Canceled"),
-                                 QStringLiteral("On Hold")};
 
 void convertFormToCards(QFormLayout *form)
 {
@@ -162,39 +153,53 @@ int loginFormTitlePointSize(const QString &fontFamily, QSize canvas)
     return 1;
 }
 
-void drawFormTitle(QPainter &painter, const QRectF &area, const QString &fontFamily,
-                   qreal pointSize)
+void drawFormTitle(QPainter &painter, const QRectF &area, int pointSize, qsizetype visibleCharacters)
 {
-    const FormTitle title(fontFamily, pointSize);
+    const FormTitle title(BrandStyle::titleFontFamily(), pointSize);
     const qreal left = area.x() + (area.width() - title.width) / 2;
     const qreal baseline = area.y() + (area.height() - title.metrics.height()) / 2
         + title.metrics.ascent();
     QPainterPath lettering;
-    lettering.addText(QPointF(left, baseline), title.font, inquiryFormTitle);
-    QPainterPath mark;
-    mark.addText(QPointF(left + title.textWidth + 3, baseline - title.metrics.ascent() * 0.48),
-                 title.markFont, QStringLiteral("TM"));
+    lettering.addText(QPointF(left, baseline), title.font, inquiryFormTitle.left(visibleCharacters));
+    if (visibleCharacters == inquiryFormTitle.size()) {
+        lettering.addText(QPointF(left + title.textWidth + 3, baseline - title.metrics.ascent() * 0.48),
+                          title.markFont, QStringLiteral("TM"));
+    }
     const QColor outline(QStringLiteral("#101C15"));
     painter.setPen(QPen(outline, 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(outline);
     painter.drawPath(lettering);
-    painter.drawPath(mark);
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
     painter.drawPath(lettering);
-    painter.drawPath(mark);
 }
 
-QPixmap renderFormTitle(QSize size, qreal ratio, const QString &fontFamily, int pointSize)
+QPixmap renderFormTitle(QSize size, qreal ratio, int pointSize,
+                        qsizetype visibleCharacters = inquiryFormTitle.size())
 {
     QImage image(size * ratio, QImage::Format_ARGB32_Premultiplied);
     image.setDevicePixelRatio(ratio);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
-    drawFormTitle(painter, QRectF(QPointF(), QSizeF(size)), fontFamily, pointSize);
+    drawFormTitle(painter, QRectF(QPointF(), QSizeF(size)), pointSize, visibleCharacters);
     painter.end();
     return QPixmap::fromImage(image);
+}
+
+QPixmap fadedPixmap(const QPixmap &source, qreal opacity)
+{
+    if (opacity >= 1.0 || source.isNull())
+        return source;
+
+    QPixmap frame(source.size());
+    frame.setDevicePixelRatio(source.devicePixelRatio());
+    frame.fill(Qt::transparent);
+    QPainter painter(&frame);
+    painter.setOpacity(opacity);
+    painter.drawPixmap(0, 0, source);
+    painter.end();
+    return frame;
 }
 
 } // namespace
@@ -203,9 +208,6 @@ MainIdyll::MainIdyll(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainIdyll)
 {
-#if defined(Q_OS_MACOS)
-    setAttribute(Qt::WA_TranslucentBackground, true);
-#endif
     ui->setupUi(this);
     qApp->installEventFilter(this);
     ui->screenStack->setCurrentWidget(ui->loginPage);
@@ -223,11 +225,11 @@ MainIdyll::MainIdyll(QWidget *parent)
     }
 #endif
     ui->signOutButton->setAttribute(Qt::WA_LayoutUsesWidgetRect);
-    QString appStyle = QStringLiteral(
-        "QMainWindow, QWidget#centralwidget { background: #142A1E; color: #E8EFE9; }"
-        "QScrollArea, QScrollArea > QWidget { background: transparent; border: none; }"
-        "QWidget#workspaceContents { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #274A34, stop:0.5 #1A3324, stop:1 #142A1E); color: #E8EFE9; }"
-        "QDialog, QGroupBox, QTabWidget::pane { background: #1F3D2B; color: #E8EFE9; border: 1px solid #3F6248; border-radius: 14px; }"
+    ui->centralwidget->setAttribute(Qt::WA_StyledBackground);
+    setStyleSheet(QStringLiteral(
+        "QMainWindow, QWidget#centralwidget, QDialog { background: %1; color: #E8EFE9; }"
+        "QScrollArea, QScrollArea > QWidget, QWidget#workspaceContents { background: transparent; border: none; }"
+        "QGroupBox, QTabWidget::pane { background: #1F3D2B; color: #E8EFE9; border: 1px solid #3F6248; border-radius: 14px; }"
         "QGroupBox { margin-top: 12px; padding: 14px; font-weight: 700; }"
         "QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 5px; color: #F4EFE6; }"
         "QFrame#informationCard { background: #1A3324; border: 1px solid #3F6248; border-radius: 11px; }"
@@ -252,27 +254,8 @@ MainIdyll::MainIdyll(QWidget *parent)
         "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
         "QStatusBar { background: #101C15; color: #DCE8DF; }"
         "QPushButton#signOutButton { min-height: 42px; max-height: 42px; background: #D9782B; color: #F3EFE4; border: 1px solid #C96824; border-radius: 22px; }"
-        "QPushButton#signOutButton:hover { background: #E4863D; color: #FFF9EF; border-color: #E99A5B; }");
-#if defined(Q_OS_MACOS)
-    appStyle.replace(QStringLiteral(
-        "QMainWindow, QWidget#centralwidget { background: #142A1E; color: #E8EFE9; }"),
-        QStringLiteral(
-        "QMainWindow, QWidget#centralwidget { background: transparent; color: #E8EFE9; }"));
-    appStyle.replace(QStringLiteral(
-        "QWidget#workspaceContents { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #274A34, stop:0.5 #1A3324, stop:1 #142A1E); color: #E8EFE9; }"),
-        QStringLiteral(
-        "QWidget#workspaceContents { background: transparent; color: #E8EFE9; }"));
-    appStyle.replace(QStringLiteral(
-        "QDialog, QGroupBox, QTabWidget::pane { background: #1F3D2B; color: #E8EFE9; border: 1px solid #3F6248; border-radius: 14px; }"),
-        QStringLiteral(
-        "QDialog { background: transparent; color: #E8EFE9; border: none; }"
-        "QGroupBox, QTabWidget::pane { background: rgba(31, 61, 43, 175); color: #E8EFE9; border: 1px solid #3F6248; border-radius: 14px; }"));
-    appStyle.replace(QStringLiteral(
-        "QFrame#informationCard { background: #1A3324; border: 1px solid #3F6248; border-radius: 11px; }"),
-        QStringLiteral(
-        "QFrame#informationCard { background: rgba(26, 51, 36, 185); border: 1px solid #3F6248; border-radius: 11px; }"));
-#endif
-    setStyleSheet(appStyle);
+        "QPushButton#signOutButton:hover { background: #E4863D; color: #FFF9EF; border-color: #E99A5B; }")
+        .arg(BrandStyle::windowBackground));
     const QString explicitPillStyle = QStringLiteral(
         "QPushButton { background: #D9782B; color: #F3EFE4; border: 1px solid #C96824; "
         "border-radius: 22px; padding: 0 18px; font-weight: 700; }"
@@ -297,14 +280,13 @@ MainIdyll::MainIdyll(QWidget *parent)
     }
     if (!visibleLogoBounds.isNull())
         logoImage = logoImage.copy(visibleLogoBounds);
-    titleFontFamily = QStringLiteral("Arial");
-    const int titleFontId = QFontDatabase::addApplicationFont(QStringLiteral(":/branding/PricedownBl.otf"));
-    if (titleFontId >= 0) {
-        const QStringList families = QFontDatabase::applicationFontFamilies(titleFontId);
-        if (!families.isEmpty())
-            titleFontFamily = families.first();
-    }
-    loginTitleSize = loginFormTitlePointSize(titleFontFamily, ui->panelTitleLabel->size());
+    loginTitleSize = loginFormTitlePointSize(BrandStyle::titleFontFamily(), ui->panelTitleLabel->size());
+    loginBrandAnimation.setDuration(900);
+    loginBrandAnimation.setStartValue(0.0);
+    loginBrandAnimation.setEndValue(1.0);
+    connect(&loginBrandAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        renderLoginBrand(value.toReal());
+    });
     ui->panelTitleLabel->setAccessibleName(inquiryFormTitle);
     ui->mainTitleLabel->setAccessibleName(inquiryFormTitle);
     ui->mainLogoLabel->setAccessibleName(tr("Idyllwild Electronic Repair logo"));
@@ -364,17 +346,18 @@ MainIdyll::MainIdyll(QWidget *parent)
     ui->publicCollectionLayout->setStretch(1, 1);
     ui->privateCollectionLayout->setStretch(1, 1);
     ui->deletedLayout->setStretch(1, 1);
-    ui->statusEdit->addItems(publicStatuses);
-    ui->pendingStatusEdit->addItems(publicStatuses);
+    RepairStatus::addOptions(*ui->statusEdit);
+    RepairStatus::addOptions(*ui->pendingStatusEdit);
     updateInvoiceButtons();
-    ui->privateInquiryFilter->addItems({tr("All Inquiries"), tr("Completed"),
-                                        tr("Pending Review/In-Repair"), tr("Canceled")});
+    RepairStatus::addOptions(*ui->privateInquiryFilter,
+        {tr("All Inquiries"), tr("Pending Review/In-Repair"), RepairStatus::readyForPickup,
+         RepairStatus::pendingPaymentReview, tr("Completed"), tr("Canceled")});
     ui->privateInquiryList->setViewMode(QListView::IconMode);
     ui->privateInquiryList->setFlow(QListView::TopToBottom);
     ui->privateInquiryList->setWrapping(true);
     ui->privateInquiryList->setResizeMode(QListView::Adjust);
     ui->privateInquiryList->setMovement(QListView::Static);
-    ui->privateInquiryList->setGridSize(QSize(176, 62));
+    ui->privateInquiryList->setGridSize(QSize(204, 62));
     ui->privateInquiryList->setIconSize(QSize(0, 0));
     ui->privateInquiryList->setWordWrap(true);
     ui->privateInquiryList->setStyleSheet(QStringLiteral(
@@ -419,6 +402,7 @@ MainIdyll::MainIdyll(QWidget *parent)
     connect(ui->publicInquiryList, &QListWidget::itemSelectionChanged, this, &MainIdyll::updateDeleteButton);
     connect(ui->privateInquiryList, &QListWidget::itemSelectionChanged, this, &MainIdyll::updateDeleteButton);
     connect(ui->saveButton, &QPushButton::clicked, this, &MainIdyll::saveInquiry);
+    connect(ui->reviewPaymentButton, &QPushButton::clicked, this, &MainIdyll::reviewInvoicePayment);
     connect(ui->savePrivateButton, &QPushButton::clicked, this, &MainIdyll::savePrivateInquiry);
     connect(ui->createInvoiceButton, &QPushButton::clicked, this, &MainIdyll::openInvoiceMaker);
     connect(ui->uploadInvoiceButton, &QPushButton::clicked, this, &MainIdyll::publishExistingInvoice);
@@ -459,6 +443,7 @@ MainIdyll::MainIdyll(QWidget *parent)
         refreshCollection(QStringLiteral("publicInquiries"));
         refreshCollection(QStringLiteral("privateInquiries"));
         refreshDeletedInquiries(true);
+        checkPendingCardPayments();
     });
 
     const QString soundPath = QSettings().value(pendingSoundKey).toString();
@@ -494,6 +479,9 @@ MainIdyll::MainIdyll(QWidget *parent)
         pendingSound.setSource(defaultPendingSound);
     });
     auto *preferences = menuBar()->addMenu(tr("Preferences"));
+#ifdef Q_OS_MACOS
+    preferences->addAction(tr("Square payments…"), this, &MainIdyll::configureSquarePayments);
+#endif
     auto *windowSize = preferences->addMenu(tr("Application size"));
     const QList<QPair<QString, QSize>> sizes{{tr("Compact (800 × 640)"), QSize(800, 640)},
                                              {tr("Standard (900 × 720)"), QSize(900, 720)},
@@ -586,6 +574,11 @@ void MainIdyll::transitionTo(QWidget *page, std::function<void()> onSwitch)
     connect(fadeOut, &QVariantAnimation::finished, this,
             [this, page, onSwitch = std::move(onSwitch)] {
         onSwitch();
+        if (page == ui->loginPage) {
+            loginBrandAnimation.stop();
+            loginBrandAnimation.setCurrentTime(0);
+            loginBrandAnimation.start();
+        }
         ui->screenStack->setCurrentWidget(page);
         ui->screenStack->layout()->activate();
     });
@@ -618,24 +611,37 @@ void MainIdyll::refreshBrandPixmaps()
         return pixmap;
     };
     loginLogoPixmap = scaledLogo(ui->businessLogoLabel->size());
-    ui->businessLogoLabel->setPixmap(loginLogoPixmap);
+    renderLoginBrand(loginBrandAnimation.currentValue().toReal());
     ui->mainLogoLabel->setPixmap(scaledLogo(ui->mainLogoLabel->size() - QSize(14, 14)));
-    ui->panelTitleLabel->setPixmap(renderFormTitle(ui->panelTitleLabel->size(), ratio,
-                                                  titleFontFamily, loginTitleSize));
-    const int compactWidth = qCeil(FormTitle(titleFontFamily, 32).width) + 16;
+    const int compactWidth = qCeil(FormTitle(BrandStyle::titleFontFamily(), 32).width) + 16;
     const QSize compactSize(compactWidth, 68);
     ui->mainTitleLabel->setFixedSize(compactSize + QSize(2, 2));
-    ui->mainTitleLabel->setPixmap(renderFormTitle(compactSize, ratio, titleFontFamily, 32));
+    ui->mainTitleLabel->setPixmap(renderFormTitle(compactSize, ratio, 32));
+}
+
+void MainIdyll::renderLoginBrand(qreal progress)
+{
+    const qreal logoOpacity = QEasingCurve(QEasingCurve::OutCubic)
+                                 .valueForProgress(qMin(progress * 1.7, 1.0));
+    ui->businessLogoLabel->setPixmap(fadedPixmap(loginLogoPixmap, logoOpacity));
+
+    // Keep the finished title centered while revealing its characters from the left.
+    const qreal typing = qBound(0.0, (progress - 0.1) / 0.9, 1.0);
+    const auto visibleCharacters = qsizetype(typing * inquiryFormTitle.size());
+    const auto title = renderFormTitle(ui->panelTitleLabel->size(), devicePixelRatioF(),
+                                       loginTitleSize, visibleCharacters);
+    ui->panelTitleLabel->setPixmap(fadedPixmap(title, qMin(typing * 2.0, 1.0)));
 }
 
 void MainIdyll::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     refreshBrandPixmaps();
-#if defined(Q_OS_MACOS)
-    applyNativeLiquidGlass(this);
-#endif
     applyMacSafeArea();
+    if (ui->screenStack->currentWidget() == ui->loginPage && loginBrandAnimation.currentTime() == 0
+        && loginBrandAnimation.state() == QAbstractAnimation::Stopped) {
+        loginBrandAnimation.start();
+    }
 }
 
 bool MainIdyll::eventFilter(QObject *watched, QEvent *event)
@@ -653,19 +659,6 @@ bool MainIdyll::eventFilter(QObject *watched, QEvent *event)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
     if (watched == this && event->type() == QEvent::DevicePixelRatioChange && loginTitleSize > 0)
         refreshBrandPixmaps();
-#endif
-#if defined(Q_OS_MACOS)
-    if (auto *dialog = qobject_cast<QDialog *>(watched)) {
-        if (event->type() == QEvent::Polish) {
-            dialog->setAttribute(Qt::WA_TranslucentBackground, true);
-        } else if (event->type() == QEvent::Show) {
-            const QPointer<QWidget> guardedDialog(dialog);
-            QTimer::singleShot(0, dialog, [guardedDialog] {
-                if (guardedDialog)
-                    applyNativeLiquidGlass(guardedDialog);
-            });
-        }
-    }
 #endif
     return QMainWindow::eventFilter(watched, event);
 }
@@ -692,6 +685,7 @@ void MainIdyll::updateInquiryActions()
     const bool canSave = !idToken.isEmpty() && !savingInquiry;
     ui->saveButton->setEnabled(canSave && publicInquiry.loaded);
     ui->savePrivateButton->setEnabled(canSave && privateInquiry.loaded);
+    ui->reviewPaymentButton->setEnabled(canSave && publicInquiry.loaded && !paymentReviewInProgress);
     updateInvoiceButtons();
     updateDeleteButton();
 }
@@ -721,7 +715,9 @@ bool MainIdyll::invoiceStatusEligible() const
     static const QSet<QString> statuses{
         QStringLiteral("done"), QStringLiteral("done!"), QStringLiteral("completed"),
         QStringLiteral("received"), QStringLiteral("recieved"), QStringLiteral("pending review"),
-        QStringLiteral("pending review/in repair"), QStringLiteral("in repair"), QStringLiteral("in progress")
+        QStringLiteral("pending review/in repair"), QStringLiteral("in repair"), QStringLiteral("in progress"),
+        QStringLiteral("awaiting payment"), QStringLiteral("ready for pickup"),
+        QStringLiteral("pending payment review")
     };
     return statuses.contains(status);
 }
@@ -734,7 +730,7 @@ void MainIdyll::updateInvoiceButtons()
         && !invoiceUploadInProgress;
     ui->createInvoiceButton->setEnabled(enabled);
     ui->uploadInvoiceButton->setEnabled(enabled);
-    const QString unavailable = tr("Load a Pending Review/In-Repair or Done! inquiry to publish an invoice.");
+    const QString unavailable = tr("Load an active repair or completed inquiry to publish an invoice.");
     ui->createInvoiceButton->setToolTip(available ? tr("Create an invoice for %1.").arg(code) : unavailable);
     ui->uploadInvoiceButton->setToolTip(available ? tr("Publish an existing PDF or renew an invoice link.") : unavailable);
 }

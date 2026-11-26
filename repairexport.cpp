@@ -70,7 +70,6 @@ void MainIdyll::showRepairExport(bool schedule, const QString &inquiryCode, cons
     QDialog dialog(this);
     dialog.setWindowFlag(Qt::Dialog, true);
     dialog.setWindowModality(Qt::WindowModal);
-    dialog.setModal(true);
     dialog.setWindowTitle(schedule ? tr("Schedule repair") : tr("Create contact"));
     auto *form = new QFormLayout(&dialog);
     const auto read = [&fields](const QString &key) { return Firestore::readStringField(fields, key); };

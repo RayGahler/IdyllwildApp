@@ -13,7 +13,11 @@ struct GeneratedInvoice
 {
     QString number;
     QByteArray pdf;
+    qint64 amountDueCents = 0;
 };
+
+QUrl customerInvoiceUrl(const QString &inquiryCode, const QString &invoiceNumber,
+                        const QString &paymentMethod = {});
 
 bool createInvoice(QWidget *parent, const QString &inquiryCode,
                    const QJsonObject &privateFields, GeneratedInvoice *result);

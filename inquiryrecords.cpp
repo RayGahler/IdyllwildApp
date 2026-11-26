@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "repairstatus.h"
 #include "preferredcontact.h"
 #include "firestore.h"
 
@@ -19,21 +20,6 @@ using Firestore::inquiryCollectionUrl;
 using Firestore::inquiryUrl;
 using Firestore::isNotFound;
 using Firestore::readStringField;
-
-namespace {
-QString statusForEditor(const QString &status)
-{
-    const QString normalized = status.trimmed().toLower();
-    if (normalized == QStringLiteral("in progress") || normalized == QStringLiteral("in-progress")
-        || normalized == QStringLiteral("in-repair"))
-        return QStringLiteral("In Repair");
-    if (normalized == QStringLiteral("completed") || normalized == QStringLiteral("done"))
-        return QStringLiteral("Done!");
-    if (normalized == QStringLiteral("received"))
-        return QStringLiteral("Recieved");
-    return status.trimmed();
-}
-} // namespace
 
 void MainIdyll::refreshCollection(const QString &collection)
 {
@@ -88,6 +74,7 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
         auto *list = isPublic ? ui->publicInquiryList : ui->privateInquiryList;
         const auto *selected = list->currentItem();
         const QString selectedId = selected ? selected->data(Qt::UserRole).toString() : QString();
+        const QString previousStatus = publicStatusByCode.value(publicInquiry.code);
         bool selectionRestored = false;
         {
             const QSignalBlocker blocker(list);
@@ -105,8 +92,12 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
                 item->setData(Qt::UserRole, documentId);
                 item->setData(Qt::UserRole + 1, displayCode);
                 if (isPublic) {
-                    const QString status = statusForEditor(readStringField(fields, "status"));
+                    const QString status = RepairStatus::normalized(readStringField(fields, "status"));
                     publicStatusByCode.insert(documentId, status);
+                    item->setToolTip(status);
+                    const QColor color = RepairStatus::accent(status);
+                    if (color.isValid())
+                        item->setForeground(color);
                 } else {
                     applyPrivateInquiryStatus(item);
                 }
@@ -120,6 +111,10 @@ void MainIdyll::loadCollectionPage(const QString &collection, const QString &pag
             loadCollectionRecord(isPublic, {});
 
         if (isPublic) {
+            const QString latestStatus = publicStatusByCode.value(publicInquiry.code);
+            if (publicInquiry.loaded && ui->statusEdit->currentText() == previousStatus
+                && latestStatus != previousStatus && ui->statusEdit->findText(latestStatus) >= 0)
+                ui->statusEdit->setCurrentText(latestStatus);
             for (int row = 0; row < ui->privateInquiryList->count(); ++row)
                 applyPrivateInquiryStatus(ui->privateInquiryList->item(row));
         }
@@ -147,6 +142,14 @@ void MainIdyll::applyPrivateInquiryStatus(QListWidgetItem *item)
         bubbleLabel = tr("Completed");
         foreground = QColor(QStringLiteral("#47311F"));
         background = QColor(QStringLiteral("#E3C9A8"));
+    } else if (status == RepairStatus::readyForPickup) {
+        category = bubbleLabel = status;
+        foreground = QColor(QStringLiteral("#153F62"));
+        background = RepairStatus::accent(status);
+    } else if (status == RepairStatus::pendingPaymentReview) {
+        category = bubbleLabel = status;
+        foreground = QColor(QStringLiteral("#5E320A"));
+        background = RepairStatus::accent(status);
     } else if (normalized == QStringLiteral("canceled") || normalized == QStringLiteral("on hold")) {
         category = tr("Canceled");
         bubbleLabel = tr("Canceled");
@@ -156,7 +159,7 @@ void MainIdyll::applyPrivateInquiryStatus(QListWidgetItem *item)
     item->setData(Qt::UserRole + 2, category);
     item->setText(code + QLatin1Char('\n') + bubbleLabel);
     item->setTextAlignment(Qt::AlignCenter);
-    item->setSizeHint(QSize(164, 52));
+    item->setSizeHint(QSize(192, 52));
     item->setForeground(foreground);
     item->setBackground(background);
     item->setToolTip(status.isEmpty()
@@ -218,7 +221,7 @@ void MainIdyll::loadCollectionRecord(bool isPublic, const QString &code)
         const auto fields = document.value("fields").toObject();
         populateInquiryEditor(isPublic, fields);
         if (isPublic)
-            publicStatusByCode.insert(code, statusForEditor(readStringField(fields, "status")));
+            publicStatusByCode.insert(code, RepairStatus::normalized(readStringField(fields, "status")));
         editor.loaded = true;
         updateInquiryActions();
     });
@@ -230,7 +233,7 @@ void MainIdyll::populateInquiryEditor(bool isPublic, const QJsonObject &fields)
         ui->publicDeviceEdit->setText(readStringField(fields, "device"));
         ui->publicModelEdit->setText(readStringField(fields, "model"));
         ui->publicMessageEdit->setPlainText(readStringField(fields, "publicMessage"));
-        const QString status = statusForEditor(readStringField(fields, "status"));
+        const QString status = RepairStatus::normalized(readStringField(fields, "status"));
         const int index = ui->statusEdit->findText(status, Qt::MatchFixedString);
         if (index < 0 && !status.isEmpty()) {
             ui->statusEdit->addItem(status);
@@ -307,7 +310,9 @@ void MainIdyll::saveInquiryRecords(bool isPublic)
         return;
 
     const QString code = editor.code;
-    const auto fields = isPublic ? publicFields() : privateFields();
+    auto fields = isPublic ? publicFields() : privateFields();
+    if (isPublic && fields.value("status").toString() == publicStatusByCode.value(code))
+        fields.remove("status");
     const QJsonObject shared{{"device", fields.value("device")}, {"model", fields.value("model")}};
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
     const auto write = [&code, &now](const QString &collection, QJsonObject data, bool requireExisting) {
@@ -345,11 +350,15 @@ void MainIdyll::saveInquiryRecords(bool isPublic)
         const auto result = QJsonDocument::fromJson(reply->readAll()).object();
         const auto error = result.value("error").toObject();
         if (reply->error() != QNetworkReply::NoError || !error.isEmpty()) {
-            showError(tr("Could not save inquiry %1. %2").arg(
-                code, Firestore::firestoreError(error, reply->errorString())));
+            const bool completionDenied = isPublic && RepairStatus::normalized(fields.value("status").toString()) == QStringLiteral("Done!")
+                && error.value("status").toString() == QStringLiteral("PERMISSION_DENIED");
+            showError(completionDenied
+                ? tr("Could not mark the inquiry Done! Check payment approval in Review invoice payment and verify your staff access.")
+                : tr("Could not save inquiry %1. %2").arg(code, Firestore::firestoreError(error, reply->errorString())));
         } else {
             if (isPublic) {
-                publicStatusByCode.insert(code, fields.value("status").toString());
+                if (fields.contains("status"))
+                    publicStatusByCode.insert(code, fields.value("status").toString());
                 for (int row = 0; row < ui->privateInquiryList->count(); ++row) {
                     auto *item = ui->privateInquiryList->item(row);
                     if (item->data(Qt::UserRole).toString() == code)
@@ -367,6 +376,8 @@ void MainIdyll::saveInquiryRecords(bool isPublic)
                 if (!model->isModified())
                     model->setText(shared.value("model").toString());
             }
+            if (isPublic)
+                refreshCollection(QStringLiteral("publicInquiries"));
             ui->statusbar->showMessage(tr("Inquiry %1 saved.").arg(code));
         }
         updateInquiryActions();

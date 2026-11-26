@@ -18,8 +18,10 @@
 #include <QImage>
 #include <QPixmap>
 #include <QUrl>
+#include <QVariantAnimation>
 
 #include <functional>
+#include <optional>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -58,9 +60,22 @@ private:
     void openInvoiceMaker();
     void publishExistingInvoice();
     void publishInvoicePdf(const QString &inquiryCode, const QString &invoiceNumber,
-                           const QByteArray &pdfBytes);
+                           const QByteArray &pdfBytes, std::optional<qint64> amountDue = {});
     void saveInvoiceLink(const QString &inquiryCode, const QString &invoiceNumber,
-                         const QUrl &downloadUrl, const QDateTime &expiresAt);
+                         const QUrl &downloadUrl, const QDateTime &expiresAt, std::optional<qint64> amountDue);
+    void finishInvoicePublication(const QString &code, const QString &invoiceNumber,
+                                  const QDateTime &expiresAt, const QString &updateTime,
+                                  const QJsonObject &invoiceFields, const QJsonArray &extraWrites = {});
+    void reportInvoicePublicationError(const QString &message);
+    void configureSquarePayments();
+    void reviewInvoicePayment();
+    void finishPaymentReview(const QString &message);
+    void checkPendingCardPayments();
+    void approveInvoicePayment(const QString &paymentId, const QString &updateTime,
+                               const QString &cardInquiryCode = {}, bool background = false);
+    void verifySquarePayment(const QString &code, const QString &paymentId, const QString &updateTime,
+                             bool background = false);
+    void finishSquareCheck(const QString &paymentId, bool background, const QString &message);
     QString invoiceInquiryCode() const;
     QString invoiceInquiryStatus() const;
     bool invoiceStatusEligible() const;
@@ -109,6 +124,7 @@ private:
     void transitionTo(QWidget *page, std::function<void()> onSwitch);
     void updateGreeting();
     void refreshBrandPixmaps();
+    void renderLoginBrand(qreal progress);
     void applyPrivateInquiryFilter();
     void applyPrivateInquiryStatus(QListWidgetItem *item);
 
@@ -125,7 +141,6 @@ private:
     quint64 pendingListRevision = 0;
     QString idToken;
     QString refreshToken;
-    QString titleFontFamily;
     bool localTestMode = false;
     bool screenTransitionInProgress = false;
     struct InquiryEditor {
@@ -138,9 +153,13 @@ private:
     QHash<QString, QString> publicStatusByCode;
     QPixmap loginLogoPixmap;
     QImage logoImage;
+    QVariantAnimation loginBrandAnimation;
     int loginTitleSize = 0;
     bool savingInquiry = false;
     bool invoiceUploadInProgress = false;
+    bool paymentReviewInProgress = false;
+    bool pendingCardQueryInProgress = false;
+    QSet<QString> squarePaymentsInProgress;
     QMargins baseCentralMargins;
     QString pendingCode;
     QString selectedPendingReceivedAt;

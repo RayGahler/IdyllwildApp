@@ -26,14 +26,20 @@ QJsonObject createInquiryWrite(const QString &collection, const QString &code,
     };
 }
 
+QNetworkRequest authorizedRequest(const QUrl &url, const QString &idToken)
+{
+    QNetworkRequest request(url);
+    request.setRawHeader("Authorization", "Bearer " + idToken.toUtf8());
+    request.setTransferTimeout(15000);
+    return request;
+}
+
 QNetworkReply *commitWrites(QNetworkAccessManager &network, const QString &idToken,
                             const QJsonArray &writes)
 {
-    QNetworkRequest request(QUrl(QStringLiteral("https://firestore.googleapis.com/v1/%1:commit")
-                                     .arg(documentsPath())));
-    request.setRawHeader("Authorization", QStringLiteral("Bearer %1").arg(idToken).toUtf8());
+    auto request = authorizedRequest(QUrl(QStringLiteral("https://firestore.googleapis.com/v1/%1:commit")
+                                              .arg(documentsPath())), idToken);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setTransferTimeout(15000);
     return network.post(request, QJsonDocument(QJsonObject{{"writes", writes}}).toJson(QJsonDocument::Compact));
 }
 

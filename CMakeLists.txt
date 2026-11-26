@@ -27,6 +27,9 @@ set(PROJECT_SOURCES
         invoice.cpp
         invoice.h
         invoiceupload.cpp
+        invoicepayments.cpp
+        squarepayments.cpp
+        squarepayments.h
         IdyllwildSync.h
         pendinginquiries.cpp
         inquiryrecords.cpp
@@ -35,13 +38,15 @@ set(PROJECT_SOURCES
         firestore.h
         preferredcontact.cpp
         preferredcontact.h
+        brandstyle.h
         sounds.qrc
+        repairstatus.h
         branding.qrc
 )
 
 if(APPLE AND NOT IOS)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent)
-    list(APPEND PROJECT_SOURCES macosglass.mm macosinvoice.mm)
+    list(APPEND PROJECT_SOURCES macosinvoice.mm macossquare.mm)
 endif()
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -71,7 +76,7 @@ target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT
     Qt${QT_VERSION_MAJOR}::Multimedia)
 
 if(APPLE AND NOT IOS)
-    target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Concurrent "-framework AppKit")
+    target_link_libraries(IdyllwildApp PRIVATE Qt${QT_VERSION_MAJOR}::Concurrent "-framework AppKit" "-framework Security")
     target_compile_options(IdyllwildApp PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 endif()
 

@@ -1,4 +1,5 @@
 #include "mainidyll.h"
+#include "repairstatus.h"
 #include "preferredcontact.h"
 #include "firestore.h"
 
@@ -24,7 +25,6 @@ void MainIdyll::openCreateInquiry()
     QDialog dialog(this);
     dialog.setWindowFlag(Qt::Dialog, true);
     dialog.setWindowModality(Qt::WindowModal);
-    dialog.setModal(true);
     dialog.setWindowTitle(QStringLiteral("Create inquiry"));
     dialog.resize(560, 680);
     auto *layout = new QVBoxLayout(&dialog);
@@ -41,8 +41,7 @@ void MainIdyll::openCreateInquiry()
     auto *device = new QLineEdit(publicGroup);
     auto *model = new QLineEdit(publicGroup);
     auto *status = new QComboBox(publicGroup);
-    status->addItems({QStringLiteral("Recieved"), QStringLiteral("In Repair"), QStringLiteral("Done!"),
-                      QStringLiteral("Canceled"), QStringLiteral("On Hold")});
+    RepairStatus::addOptions(*status);
     auto *publicMessage = new QPlainTextEdit(publicGroup);
     publicForm->addRow(QStringLiteral("Device"), device);
     publicForm->addRow(QStringLiteral("Model"), model);
